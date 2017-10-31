@@ -29,6 +29,8 @@
 #include "type/types.h"
 #include "threadpool/mono_queue_pool.h"
 
+#include "parser/pg_query.h"
+
 namespace peloton {
 namespace tcop {
 
@@ -330,6 +332,11 @@ std::shared_ptr<Statement> TrafficCop::PrepareStatement(
   try {
     auto &peloton_parser = parser::PostgresParser::GetInstance();
     auto sql_stmt = peloton_parser.BuildParseTree(query_string);
+
+
+    // DEBUG
+    LOG_INFO("Fingerprint: %s", pg_query_fingerprint(query_string.c_str()).hexdigest);
+
     if (sql_stmt->is_valid == false) {
       throw ParserException("Error parsing SQL statement");
     }
