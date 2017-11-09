@@ -118,7 +118,7 @@ class CodeGen {
   //===--------------------------------------------------------------------===//
   llvm::Type *LookupType(const std::string &name) const;
   llvm::Function *LookupBuiltin(const std::string &fn_name) const {
-    return code_context_.LookupBuiltin(fn_name);
+    return code_context_.LookupBuiltinType(fn_name);
   }
   llvm::Function *RegisterBuiltin(const std::string &fn_name,
                                   llvm::FunctionType *fn_type, void *func_impl);
@@ -127,7 +127,9 @@ class CodeGen {
   llvm::Value *GetState() const;
 
   /// Return the size of the given type in bytes (returns 1 when size < 1 byte)
-  uint64_t SizeOf(llvm::Type *type) const;
+  uint64_t SizeOf(llvm::Type *type) const {
+    return code_context_.GetTypeSize(type);
+  }
 
   //===--------------------------------------------------------------------===//
   // ACCESSORS

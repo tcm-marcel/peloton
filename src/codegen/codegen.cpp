@@ -230,11 +230,5 @@ llvm::Value *CodeGen::GetState() const {
   return func_builder->GetArgumentByPosition(0);
 }
 
-// Return the number of bytes needed to store the given type
-uint64_t CodeGen::SizeOf(llvm::Type *type) const {
-  auto size = code_context_.GetDataLayout().getTypeSizeInBits(type) / 8;
-  return size != 0 ? size : 1;
-}
-
 }  // namespace codegen
 }  // namespace peloton

@@ -34,7 +34,8 @@ CompilationContext::CompilationContext(Query &query,
   auto *txn_type = TransactionProxy::GetType(codegen_)->getPointerTo();
   txn_state_id_ = runtime_state.RegisterState("transaction", txn_type);
 
-  auto *catalog_ptr_type = StorageManagerProxy::GetType(codegen_)->getPointerTo();
+  auto *catalog_ptr_type =
+      StorageManagerProxy::GetType(codegen_)->getPointerTo();
   catalog_state_id_ = runtime_state.RegisterState("catalog", catalog_ptr_type);
 
   auto *executor_context_type =
@@ -105,15 +106,11 @@ void CompilationContext::GeneratePlan(QueryCompiler::CompileStats *stats) {
 
   // Next, we prepare the query statement with the functions we've generated
   Query::QueryFunctions funcs = {init, plan, tear_down};
-  bool prepared = query_.Prepare(funcs);
-  if (!prepared) {
-    throw Exception{"There was an error preparing the compiled query"};
-  }
+  query_.Prepare(funcs);
 
-  // We're done
   if (stats != nullptr) {
     timer.Stop();
-    stats->jit_ms = timer.GetDuration();
+    stats->optimize_ms = timer.GetDuration();
   }
 }
 

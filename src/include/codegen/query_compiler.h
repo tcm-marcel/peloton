@@ -31,9 +31,8 @@ class QueryCompiler {
  public:
   //===--------------------------------------------------------------------===//
   // A tiny struct that collects statistics on query compilation.  In here, we
-  // can track the amount of time it took to setup the compilation, the amount
-  // of time it took to generate the LLVM IR and the amount of time it took to
-  // JIT compile the query's components into native code.
+  // can track the amount of time it took to setup the compilation and the
+  // amount of time it took to generate the LLVM IR
   //===--------------------------------------------------------------------===//
   struct CompileStats {
     // The time taken to setup the compilation context
@@ -42,8 +41,8 @@ class QueryCompiler {
     // The time taken to generate all the IR for the plan
     double ir_gen_ms = 0.0;
 
-    // The time taken to perform JIT compilation
-    double jit_ms = 0.0;
+    // The time taken for the LLVM optimizations
+    double optimize_ms = 0.0;
   };
 
   // Constructor
@@ -64,7 +63,6 @@ class QueryCompiler {
   static bool IsExpressionSupported(const expression::AbstractExpression &plan);
 
  private:
-
   // Counter we use to ID the queries we compiled
   std::atomic<uint64_t> next_id_;
 };

@@ -14,6 +14,7 @@
 
 #include "codegen/code_context.h"
 #include "codegen/runtime_state.h"
+#include "storage/storage_manager.h"
 
 namespace peloton {
 
@@ -37,24 +38,37 @@ namespace codegen {
 class Query {
  public:
   struct RuntimeStats {
+    double jit_compile_ms = 0.0;
     double init_ms = 0.0;
     double plan_ms = 0.0;
     double tear_down_ms = 0.0;
   };
 
+  // Struct holding the llvm functions of this query
   struct QueryFunctions {
     llvm::Function *init_func;
     llvm::Function *plan_func;
     llvm::Function *tear_down_func;
   };
 
+  // We use this handy class for the parameters to the llvm functions
+  // to avoid complex casting and pointer manipulation
+  struct FunctionArguments {
+    concurrency::Transaction *txn;
+    storage::StorageManager *catalog;
+    executor::ExecutorContext *executor_context;
+    char *consumer_arg;
+    char rest[0];
+  } PACKED;
+
   // Setup this query statement with the given LLVM function components. The
   // provided functions perform initialization, execution and tear down of
   // this query.
-  bool Prepare(const QueryFunctions &funcs);
+  void Prepare(const QueryFunctions &funcs);
 
   // Execute th e query given the catalog manager and runtime/consumer state
-  // that is passed along to the query execution code.
+  // that is passed along to the query execution code. The decision whether
+  // to JIT compile or to interpret the query plan is made in here.
   void Execute(concurrency::Transaction &txn,
                executor::ExecutorContext *executor_context, char *consumer_arg,
                RuntimeStats *stats = nullptr);
@@ -74,6 +88,13 @@ class Query {
   // Constructor
   Query(const planner::AbstractPlan &query_plan);
 
+  // Compile the ir and execute it (compilation path)
+  bool CompileAndExecute(FunctionArguments *function_arguments,
+                         RuntimeStats *stats);
+
+  // Interpret the ir (interpretation path)
+  bool Interpret(FunctionArguments *function_arguments, RuntimeStats *stats);
+
  private:
   // The query plan
   const planner::AbstractPlan &query_plan_;
@@ -84,11 +105,10 @@ class Query {
   // The size of the parameter the functions take
   RuntimeState runtime_state_;
 
-  // The init(), plan() and tearDown() functions
-  typedef void (*compiled_function_t)(char *);
-  compiled_function_t init_func_;
-  compiled_function_t plan_func_;
-  compiled_function_t tear_down_func_;
+  // The llvm ir of the init(), plan() and tearDown() functions
+  QueryFunctions query_funcs_;
+
+  typedef void (*compiled_function_t)(FunctionArguments *);
 
  private:
   // This class cannot be copy or move-constructed
