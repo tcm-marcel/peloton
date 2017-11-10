@@ -26,6 +26,7 @@
 #include "expression/operator_expression.h"
 #include "expression/star_expression.h"
 #include "expression/tuple_value_expression.h"
+#include "expression/typecast_expression.h"
 #include "parser/pg_query.h"
 #include "parser/pg_trigger.h"
 #include "parser/pg_list.h"
@@ -375,6 +376,21 @@ expression::AbstractExpression* PostgresParser::CaseExprTransform(
                    expression::CaseExpression::AbsExprPtr(defresult_expr));
 }
 
+expression::AbstractExpression* PostgresParser::TypecastExprTransform(TypeCast *root) {
+  if (root == nullptr) return nullptr;
+
+  // the type string we look for is in a Value, that is referenced by the first
+  // list item in typename->names
+  value* type_value = static_cast<value*>(root->typeName->names->head->data.ptr_value);
+
+  // make sure the casted postgres value is a string
+  PL_ASSERT(type_value != nullptr && type_value->type == T_String);
+
+  type::TypeId to_type = StringToTypeId(std::string(type_value->val.str));
+
+  return new expression::TypecastExpression(ExprTransform(root->arg), to_type);
+}
+
 // This function takes in groupClause and havingClause of a Postgres SelectStmt
 // transfers into a Peloton GroupByDescription object.
 parser::GroupByDescription* PostgresParser::GroupByTransform(List* group,
@@ -642,6 +658,10 @@ expression::AbstractExpression* PostgresParser::ExprTransform(Node* node) {
     }
     case T_CaseExpr: {
       expr = CaseExprTransform(reinterpret_cast<CaseExpr*>(node));
+      break;
+    }
+    case T_TypeCast: {
+      expr = TypecastExprTransform(reinterpret_cast<TypeCast*>(node));
       break;
     }
     default: {

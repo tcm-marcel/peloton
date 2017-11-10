@@ -466,6 +466,17 @@ typedef enum NodeTag {
  */
 typedef struct Node { NodeTag type; } Node;
 
+// TODO(tianyu) This is postgres value for some reason lower-cased. Need to remame to
+// PostgresValue
+//  typedef struct Value
+//  {
+//    NodeTag		type;			/* tag appropriately (eg. T_String) */
+//    union ValUnion
+//    {
+//      long		ival;		/* machine integer */
+//      char	   *str;		/* string */
+//    }			val;
+//  } Value;
 typedef struct value {
   NodeTag type; /* tag appropriately (eg. T_String) */
   union ValUnion {

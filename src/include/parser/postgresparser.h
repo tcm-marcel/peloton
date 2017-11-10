@@ -144,6 +144,8 @@ class PostgresParser {
   // transform helper for case expressions
   static expression::AbstractExpression* CaseExprTransform(CaseExpr* root);
 
+  static expression::AbstractExpression* TypecastExprTransform(TypeCast *root);
+
   // transform helper for group by clauses
   static parser::GroupByDescription* GroupByTransform(List* root, Node* having);
 

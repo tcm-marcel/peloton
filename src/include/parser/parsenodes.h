@@ -635,3 +635,11 @@ typedef struct VacuumStmt
 	RangeVar   *relation;		/* single table to process, or NULL */
 	List	   *va_cols;		/* list of column names, or NIL for all */
 } VacuumStmt;
+
+typedef struct TypeCast
+{
+  NodeTag		type;
+  Node	   *arg;			/* the expression being casted */
+  TypeName   *typeName;		/* the target type */
+  int			location;		/* token location, or -1 if unknown */
+} TypeCast;
