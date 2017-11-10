@@ -376,17 +376,21 @@ expression::AbstractExpression* PostgresParser::CaseExprTransform(
                    expression::CaseExpression::AbsExprPtr(defresult_expr));
 }
 
-expression::AbstractExpression* PostgresParser::TypecastExprTransform(TypeCast *root) {
+expression::AbstractExpression* PostgresParser::TypecastExprTransform(
+    TypeCast* root) {
   if (root == nullptr) return nullptr;
 
-  // the type string we look for is in a Value, that is referenced by the first
+  // the type string we look for is in a Value, that is referenced by the last
   // list item in typename->names
-  value* type_value = static_cast<value*>(root->typeName->names->head->data.ptr_value);
+  // TODO(marcel) we don't know why it is the last list item, but it works
+  Value* type_value =
+      static_cast<Value*>(root->typeName->names->tail->data.ptr_value);
 
   // make sure the casted postgres value is a string
   PL_ASSERT(type_value != nullptr && type_value->type == T_String);
 
-  type::TypeId to_type = StringToTypeId(std::string(type_value->val.str));
+  type::TypeId to_type =
+      PostgresStringToTypeId(std::string(type_value->val.str));
 
   return new expression::TypecastExpression(ExprTransform(root->arg), to_type);
 }
@@ -519,7 +523,7 @@ expression::AbstractExpression* PostgresParser::FuncCallTransform(
           child_expr = ExprTransform(expr_node);
         } catch (NotImplementedException e) {
           throw NotImplementedException(StringUtil::Format(
-                "Exception thrown in function expr:\n%s", e.what()));
+              "Exception thrown in function expr:\n%s", e.what()));
         }
         children.push_back(child_expr);
       }

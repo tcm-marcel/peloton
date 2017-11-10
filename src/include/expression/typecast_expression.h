@@ -17,35 +17,30 @@
 #include "type/value_factory.h"
 
 namespace peloton {
-  namespace expression {
+namespace expression {
 
 //===----------------------------------------------------------------------===//
 // OperatorExpression
 //===----------------------------------------------------------------------===//
-    class TypecastExpression : public AbstractExpression {
-
-    public:
-      TypecastExpression(AbstractExpression *inner, type::TypeId type_id) : AbstractExpression(ExpressionType::CAST),
-                                                                            type_id_(type_id) {
-        if (inner != nullptr) children_.push_back(std::unique_ptr<AbstractExpression>(inner));
-      }
-
-
-      type::Value Evaluate(const AbstractTuple *, const AbstractTuple *,
-                           executor::ExecutorContext *) const override {
-        // TODO(tianyu) implement
-        throw std::runtime_error("Not implemented");
-      }
-
-      AbstractExpression *Copy() const override {
-        return new TypecastExpression(*this);
-      }
-
-      void Accept(SqlNodeVisitor *visitor) override { visitor->Visit(this); }
-
-    private:
-      type::TypeId type_id_;
-
-    };
+class TypecastExpression : public AbstractExpression {
+ public:
+  TypecastExpression(AbstractExpression *inner, type::TypeId type_id)
+      : AbstractExpression(ExpressionType::CAST, type_id) {
+    if (inner != nullptr)
+      children_.push_back(std::unique_ptr<AbstractExpression>(inner));
   }
+
+  type::Value Evaluate(const AbstractTuple *, const AbstractTuple *,
+                       executor::ExecutorContext *) const override {
+    // TODO(tianyu) implement
+    throw std::runtime_error("Not implemented");
+  }
+
+  AbstractExpression *Copy() const override {
+    return new TypecastExpression(*this);
+  }
+
+  void Accept(SqlNodeVisitor *visitor) override { visitor->Visit(this); }
+};
+}
 }

@@ -411,7 +411,7 @@ typedef enum NodeTag {
   T_DefElem,
   T_RangeTblEntry,
   T_RangeTblFunction,
-  T_TableSampleClause, // 925
+  T_TableSampleClause,  // 925
   T_WithCheckOption,
   T_SortGroupClause,
   T_GroupingSet,
@@ -466,7 +466,8 @@ typedef enum NodeTag {
  */
 typedef struct Node { NodeTag type; } Node;
 
-// TODO(tianyu) This is postgres value for some reason lower-cased. Need to remame to
+// TODO(tianyu) This is postgres value for some reason lower-cased. Need to
+// remame to
 // PostgresValue
 //  typedef struct Value
 //  {
@@ -483,7 +484,7 @@ typedef struct value {
     long ival; /* machine integer */
     char *str; /* string */
   } val;
-} value;
+} Value;
 
 #define nodeTag(nodeptr) (((const Node *)(nodeptr))->type)
 
