@@ -23,6 +23,23 @@ uint32_t StringFunctions::Ascii(const char *str, uint32_t length) {
   return length <= 1 ? 0 : static_cast<uint32_t>(str[0]);
 }
 
+int32_t StringFunctions::CastToInt(const char *str, uint32_t length) {
+  PL_ASSERT(str != nullptr);
+  int32_t result;
+
+  std::string string;
+  string.assign(str, length);
+
+  result = std::stoi(string);
+  // TODO(marcel): if cast is not possible, throw exception or return NULL?
+  // } catch (std::runtime_error &e) { ...
+  // returning NULL would require more complex logic here
+  // however, Postgres seems to throw an exception for: SELECT 'notanumber'::INT
+  // -> ERROR: invalid input syntax for integer: "notanumber" Position: 8
+
+  return result;
+}
+
 // ASCII code of the first character of the argument.
 type::Value StringFunctions::_Ascii(const std::vector<type::Value> &args) {
   PL_ASSERT(args.size() == 1);

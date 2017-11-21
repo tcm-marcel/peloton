@@ -25,6 +25,9 @@ class StringFunctions {
   static uint32_t Ascii(const char *str, uint32_t length);
   static type::Value _Ascii(const std::vector<type::Value> &args);
 
+  // Cast string to integer
+  static int32_t CastToInt(const char *str, uint32_t length);
+
   // Get Character from integer
   static type::Value Chr(const std::vector<type::Value> &args);
 

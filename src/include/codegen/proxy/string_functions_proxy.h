@@ -20,6 +20,7 @@ namespace codegen {
 PROXY(StringFunctions) {
   // Proxy everything in function::StringFunctions
   DECLARE_METHOD(Ascii);
+  DECLARE_METHOD(CastToInt);
 };
 
 }  // namespace codegen

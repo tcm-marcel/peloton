@@ -19,6 +19,7 @@ namespace peloton {
 namespace codegen {
 
 DEFINE_METHOD(peloton::function, StringFunctions, Ascii);
+DEFINE_METHOD(peloton::function, StringFunctions, CastToInt);
 
 }  // namespace codegen
 }  // namespace peloton
