@@ -131,18 +131,22 @@ class InterpreterUtils {
     switch (count) {
       case 1: {
         *reinterpret_cast<uint8_t *>(dest) = *reinterpret_cast<uint8_t *>(src);
+        break;
       }
       case 2: {
         *reinterpret_cast<uint16_t *>(dest) =
             *reinterpret_cast<uint16_t *>(src);
+        break;
       }
       case 4: {
         *reinterpret_cast<uint32_t *>(dest) =
             *reinterpret_cast<uint32_t *>(src);
+        break;
       }
       case 8: {
         *reinterpret_cast<uint64_t *>(dest) =
             *reinterpret_cast<uint64_t *>(src);
+        break;
       }
       default: { PL_MEMCPY(dest, src, count); }
     }

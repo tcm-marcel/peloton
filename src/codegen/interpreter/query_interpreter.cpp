@@ -470,6 +470,7 @@ void QueryInterpreter::ExecuteLoad(FunctionState &state) {
 
   // use MemCopy instead of simple pointer dereferencing to avoid a possible
   // segmentation fault if the value is smaller than 8 Bytes
+  PL_ASSERT(type_size <= 8);
   value_t value;
   InterpreterUtils::MemCopy(&value, reinterpret_cast<void *>(pointer),
                             type_size);
