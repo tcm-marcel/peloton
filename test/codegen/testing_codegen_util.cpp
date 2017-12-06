@@ -139,22 +139,25 @@ void PelotonCodeGenTest::LoadTestTable(oid_t table_id, uint32_t num_rows,
   txn_manager.CommitTransaction(txn);
 }
 
-codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecute(
-    const planner::AbstractPlan &plan, codegen::QueryResultConsumer &consumer,
-    char *consumer_state) {
+std::pair<codegen::QueryCompiler::CompileStats, codegen::Query::RuntimeStats>
+PelotonCodeGenTest::CompileAndExecute(const planner::AbstractPlan &plan,
+                                      codegen::QueryResultConsumer &consumer,
+                                      char *consumer_state) {
   // Start a transaction
   auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto *txn = txn_manager.BeginTransaction();
 
+  std::pair<codegen::QueryCompiler::CompileStats, codegen::Query::RuntimeStats>
+      stats;
+
   // Compile
-  codegen::QueryCompiler::CompileStats stats;
   codegen::QueryCompiler compiler;
-  auto compiled_query = compiler.Compile(plan, consumer, &stats);
+  auto compiled_query = compiler.Compile(plan, consumer, &stats.first);
 
   // Run
   compiled_query->Execute(*txn, std::unique_ptr<executor::ExecutorContext>(
                                     new executor::ExecutorContext{txn}).get(),
-                          consumer_state);
+                          consumer_state, &stats.second);
 
   txn_manager.CommitTransaction(txn);
   return stats;

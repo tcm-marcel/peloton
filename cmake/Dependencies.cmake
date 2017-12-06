@@ -55,6 +55,9 @@ llvm_map_components_to_libnames(LLVM_LIBRARIES core mcjit nativecodegen native)
 include_directories(SYSTEM ${LLVM_INCLUDE_DIRS})
 list(APPEND Peloton_LINKER_LIBS ${LLVM_LIBRARIES})
 
+# --[ FFI 3.7+
+list(APPEND Peloton_LINKER_LIBS "-lffi")
+
 # --[ IWYU
 
 # Generate clang compilation database

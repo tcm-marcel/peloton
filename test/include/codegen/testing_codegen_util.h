@@ -68,9 +68,10 @@ class PelotonCodeGenTest : public PelotonTest {
                      bool insert_nulls = false);
 
   // Compile and execute the given plan
-  codegen::QueryCompiler::CompileStats CompileAndExecute(
-      const planner::AbstractPlan &plan, codegen::QueryResultConsumer &consumer,
-      char *consumer_state);
+  std::pair<codegen::QueryCompiler::CompileStats, codegen::Query::RuntimeStats>
+  CompileAndExecute(const planner::AbstractPlan &plan,
+                    codegen::QueryResultConsumer &consumer,
+                    char *consumer_state);
 
   //===--------------------------------------------------------------------===//
   // Helpers
