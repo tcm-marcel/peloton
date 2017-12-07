@@ -89,7 +89,9 @@ if [ "$DISTRO" = "UBUNTU" ]; then
         libpqxx-dev \
         llvm-3.7 \
         libedit-dev \
-        postgresql-client
+        postgresql-client \
+        libffi6 \
+        libffi-dev
 
 ## ------------------------------------------------
 ## FEDORA
@@ -111,7 +113,9 @@ elif [[ "$DISTRO" == *"FEDORA"* ]]; then
         libpqxx \
         llvm3.7 \
         libedit-devel \
-        postgresql
+        postgresql \
+        libffi6 \
+        libffi-dev
 
 ## ------------------------------------------------
 ## REDHAT
@@ -149,7 +153,9 @@ elif [[ "$DISTRO" == *"REDHAT"* ]] && [[ "${DISTRO_VER%.*}" == "7" ]]; then
         libpqxx-devel \
         llvm3.7 \
         libedit-devel \
-        postgresql93
+        postgresql93 \
+        libffi6 \
+        libffi-dev
 
     # Manually download some packages to guarantee
     # version compatibility
@@ -180,6 +186,7 @@ elif [ "$DISTRO" = "DARWIN" ]; then
     brew install libedit
     brew install llvm@3.7
     brew install postgresql
+    brew install libffi
 
 ## ------------------------------------------------
 ## UNKNOWN
