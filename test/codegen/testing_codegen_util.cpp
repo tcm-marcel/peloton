@@ -16,14 +16,14 @@
 #include "codegen/proxy/runtime_functions_proxy.h"
 #include "codegen/proxy/value_proxy.h"
 #include "codegen/proxy/values_runtime_proxy.h"
+#include "codegen/query_cache.h"
 #include "concurrency/transaction_manager_factory.h"
-#include "executor/plan_executor.h"
 #include "executor/executor_context.h"
+#include "executor/plan_executor.h"
 #include "expression/comparison_expression.h"
 #include "expression/operator_expression.h"
 #include "expression/tuple_value_expression.h"
 #include "storage/table_factory.h"
-#include "codegen/query_cache.h"
 
 namespace peloton {
 namespace test {
@@ -110,18 +110,18 @@ void PelotonCodeGenTest::CreateTestTables(concurrency::TransactionContext *txn,
     catalog->CreateTable(test_db_name, test_table_names[i],
                          std::move(table_schema), txn, false,
                          tuples_per_tilegroup);
-    test_table_oids.push_back(catalog->GetTableObject(test_db_name,
-                                                      test_table_names[i],
-                                                      txn)->GetTableOid());
+    test_table_oids.push_back(
+        catalog->GetTableObject(test_db_name, test_table_names[i], txn)
+            ->GetTableOid());
   }
   for (int i = 4; i < 5; i++) {
     auto table_schema = CreateTestSchema(true);
     catalog->CreateTable(test_db_name, test_table_names[i],
                          std::move(table_schema), txn, false,
                          tuples_per_tilegroup);
-    test_table_oids.push_back(catalog->GetTableObject(test_db_name,
-                                                      test_table_names[i],
-                                                      txn)->GetTableOid());
+    test_table_oids.push_back(
+        catalog->GetTableObject(test_db_name, test_table_names[i], txn)
+            ->GetTableOid());
   }
 }
 
@@ -134,8 +134,9 @@ void PelotonCodeGenTest::LoadTestTable(oid_t table_id, uint32_t num_rows,
   auto *table_schema = test_table.GetSchema();
   size_t curr_size = test_table.GetTupleCount();
 
-  auto col_val =
-      [](uint32_t tuple_id, uint32_t col_id) { return 10 * tuple_id + col_id; };
+  auto col_val = [](uint32_t tuple_id, uint32_t col_id) {
+    return 10 * tuple_id + col_id;
+  };
 
   const bool allocate = true;
   auto testing_pool = TestingHarness::GetInstance().GetTestingPool();
@@ -170,25 +171,30 @@ void PelotonCodeGenTest::LoadTestTable(oid_t table_id, uint32_t num_rows,
   txn_manager.CommitTransaction(txn);
 }
 
-void PelotonCodeGenTest::ExecuteSync(
+codegen::Query::RuntimeStats PelotonCodeGenTest::ExecuteSync(
     codegen::Query &query,
     std::unique_ptr<executor::ExecutorContext> executor_context,
     codegen::QueryResultConsumer &consumer) {
   std::mutex mu;
   std::condition_variable cond;
   bool finished = false;
+  codegen::Query::RuntimeStats stats;
+
   query.Execute(std::move(executor_context), consumer,
                 [&](executor::ExecutionResult) {
                   std::unique_lock<decltype(mu)> lock(mu);
                   finished = true;
                   cond.notify_one();
-                });
+                },
+                &stats);
 
   std::unique_lock<decltype(mu)> lock(mu);
   cond.wait(lock, [&] { return finished; });
+
+  return stats;
 }
 
-codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecute(
+PelotonCodeGenTest::CodeGenStats PelotonCodeGenTest::CompileAndExecute(
     planner::AbstractPlan &plan, codegen::QueryResultConsumer &consumer) {
   codegen::QueryParameters parameters(plan, {});
 
@@ -197,15 +203,17 @@ codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecute(
   auto *txn = txn_manager.BeginTransaction();
 
   // Compile the query.
-  codegen::QueryCompiler::CompileStats stats;
+  CodeGenStats stats;
   auto compiled_query = codegen::QueryCompiler().Compile(
-      plan, parameters.GetQueryParametersMap(), consumer, &stats);
+      plan, parameters.GetQueryParametersMap(), consumer, &stats.compile_stats);
 
   // Execute the query.
-  ExecuteSync(*compiled_query,
-              std::unique_ptr<executor::ExecutorContext>(
-                  new executor::ExecutorContext(txn, std::move(parameters))),
-              consumer);
+  compiled_query->Compile();
+  stats.runtime_stats = ExecuteSync(
+      *compiled_query,
+      std::unique_ptr<executor::ExecutorContext>(
+          new executor::ExecutorContext(txn, std::move(parameters))),
+      consumer);
 
   // Commit the transaction.
   txn_manager.CommitTransaction(txn);
@@ -213,7 +221,7 @@ codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecute(
   return stats;
 }
 
-codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecuteCache(
+PelotonCodeGenTest::CodeGenStats PelotonCodeGenTest::CompileAndExecuteCache(
     std::shared_ptr<planner::AbstractPlan> plan,
     codegen::QueryResultConsumer &consumer, bool &cached,
     std::vector<type::Value> params) {
@@ -226,19 +234,22 @@ codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecuteCache(
                                     codegen::QueryParameters(*plan, params)));
 
   // Compile
-  codegen::QueryCompiler::CompileStats stats;
+  CodeGenStats stats;
   codegen::Query *query = codegen::QueryCache::Instance().Find(plan);
   cached = (query != nullptr);
   if (query == nullptr) {
     codegen::QueryCompiler compiler;
     auto compiled_query = compiler.Compile(
-        *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
+        *plan, executor_context->GetParams().GetQueryParametersMap(), consumer,
+        &stats.compile_stats);
+    compiled_query->Compile();
     query = compiled_query.get();
     codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
   }
 
   // Execute the query.
-  ExecuteSync(*query, std::move(executor_context), consumer);
+  stats.runtime_stats =
+      ExecuteSync(*query, std::move(executor_context), consumer);
 
   // Commit the transaction.
   txn_manager.CommitTransaction(txn);

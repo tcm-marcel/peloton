@@ -283,5 +283,19 @@ uint64_t CodeGen::SizeOf(llvm::Type *type) const {
   return size != 0 ? size : 1;
 }
 
+std::string CodeGen::Print(const llvm::Value *value) {
+  std::string string;
+  llvm::raw_string_ostream llvm_stream(string);
+  llvm_stream << *value;
+  return llvm_stream.str();
+}
+
+std::string CodeGen::Print(llvm::Type *type) {
+  std::string string;
+  llvm::raw_string_ostream llvm_stream(string);
+  llvm_stream << *type;
+  return llvm_stream.str();
+}
+
 }  // namespace codegen
 }  // namespace peloton

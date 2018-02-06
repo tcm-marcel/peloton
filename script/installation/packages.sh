@@ -160,6 +160,8 @@ if [ "$DISTRO" = "UBUNTU" ]; then
         libedit-dev \
         libssl-dev \
         postgresql-client \
+        libffi6 \
+        libffi-dev \
         libtbb-dev \
         python3-pip \
         curl \
@@ -241,6 +243,8 @@ elif [[ "$DISTRO" == *"FEDORA"* ]]; then
         libtsan \
         libubsan \
         libatomic \
+        libffi6 \
+        libffi-dev \
         tbb-devel \
         python3-pip \
         curl \
@@ -313,6 +317,8 @@ elif [[ "$DISTRO" == *"REDHAT"* ]] && [[ "${DISTRO_VER%.*}" == "7" ]]; then
         llvm3.9-static \
         llvm3.9-devel \
         postgresql \
+        libffi6 \
+        libffi-dev \
         libtbb-dev
 
     # Manually download some packages to guarantee
@@ -347,6 +353,7 @@ elif [ "$DISTRO" = "DARWIN" ]; then
     brew install libedit
     brew install llvm@3.7
     brew install postgresql
+    brew install libffi
     brew install tbb
     brew install curl
     brew install wget

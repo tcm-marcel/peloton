@@ -54,6 +54,11 @@ class PelotonCodeGenTest : public PelotonTest {
 
   PelotonCodeGenTest(oid_t tuples_per_tilegroup = DEFAULT_TUPLES_PER_TILEGROUP);
 
+  typedef struct {
+    codegen::QueryCompiler::CompileStats compile_stats;
+    codegen::Query::RuntimeStats runtime_stats;
+  } CodeGenStats;
+
   virtual ~PelotonCodeGenTest();
 
   // Get the test database
@@ -79,16 +84,16 @@ class PelotonCodeGenTest : public PelotonTest {
   void LoadTestTable(oid_t table_id, uint32_t num_rows,
                      bool insert_nulls = false);
 
-  static void ExecuteSync(
+  static codegen::Query::RuntimeStats ExecuteSync(
       codegen::Query &query,
       std::unique_ptr<executor::ExecutorContext> executor_context,
       codegen::QueryResultConsumer &consumer);
 
   // Compile and execute the given plan
-  codegen::QueryCompiler::CompileStats CompileAndExecute(
+  CodeGenStats CompileAndExecute(
       planner::AbstractPlan &plan, codegen::QueryResultConsumer &consumer);
 
-  codegen::QueryCompiler::CompileStats CompileAndExecuteCache(
+  CodeGenStats CompileAndExecuteCache(
       std::shared_ptr<planner::AbstractPlan> plan,
       codegen::QueryResultConsumer &consumer, bool &cached,
       std::vector<type::Value> params = {});

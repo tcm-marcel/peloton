@@ -12,9 +12,9 @@
 
 #include "codegen/compilation_context.h"
 
-#include "codegen/proxy/storage_manager_proxy.h"
 #include "codegen/proxy/executor_context_proxy.h"
 #include "codegen/proxy/query_parameters_proxy.h"
+#include "codegen/proxy/storage_manager_proxy.h"
 #include "codegen/proxy/storage_manager_proxy.h"
 #include "common/logger.h"
 #include "common/timer.h"
@@ -122,16 +122,13 @@ void CompilationContext::GeneratePlan(QueryCompiler::CompileStats *stats) {
   }
 
   // Next, we prepare the query statement with the functions we've generated
-  Query::QueryFunctions funcs = {init, plan, tear_down};
-  bool prepared = query_.Prepare(funcs);
-  if (!prepared) {
-    throw Exception{"There was an error preparing the compiled query"};
-  }
+  Query::LLVMFunctions funcs = {init, plan, tear_down};
+  query_.Prepare(funcs);
 
   // We're done
   if (stats != nullptr) {
     timer.Stop();
-    stats->jit_ms = timer.GetDuration();
+    stats->optimize_ms = timer.GetDuration();
   }
 }
 
