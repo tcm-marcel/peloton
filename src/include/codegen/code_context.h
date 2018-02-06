@@ -34,6 +34,10 @@ namespace codegen {
 
 class FunctionBuilder;
 
+namespace interpreter {
+class ContextBuilder;
+}
+
 //===----------------------------------------------------------------------===//
 // The context where all generated LLVM query code resides. We create a context
 // instance for every query we see.  We keep instances of these around in the
@@ -44,6 +48,7 @@ class CodeContext {
   friend class CodeGen;
   friend class FunctionBuilder;
   friend class PelotonMM;
+  friend class interpreter::ContextBuilder;
 
  public:
   using FuncPtr = void *;
@@ -61,17 +66,30 @@ class CodeContext {
   void RegisterBuiltin(llvm::Function *func_decl, FuncPtr func_impl);
 
   /// Lookup a builtin function that has been registered in this context
-  llvm::Function *LookupBuiltin(const std::string &name) const {
+  llvm::Function *LookupBuiltinType(const std::string &name) const {
     auto iter = builtins_.find(name);
-    return iter != builtins_.end() ? iter->second : nullptr;
+    return iter != builtins_.end() ? iter->second.first : nullptr;
   }
 
-  // Returns the function pointer for UDF that has been registered in this
+  /// Lookup a builtin function implementation has been registered in this
+  /// context
+  void *LookupBuiltinImpl(const std::string &name) const {
+    auto iter = builtins_.find(name);
+    return iter != builtins_.end() ? iter->second.second : nullptr;
+  }
+
+// Returns the function pointer for UDF that has been registered in this
   // context
   llvm::Function *GetUDF() const { return udf_func_ptr_; }
 
   // Sets UDF function ptr
   void SetUDF(llvm::Function *func_ptr) { udf_func_ptr_ = func_ptr; }
+
+  /// Verify all the code contained in this context
+  bool Verify();
+
+  /// Optimize all the code contained in this context
+  bool Optimize();
 
   /// Compile all the code contained in this context
   bool Compile();
@@ -85,6 +103,20 @@ class CodeContext {
     }
     return nullptr;
   }
+
+  // Get the number of bytes that are needed to store this type
+  size_t GetTypeSize(llvm::Type *type) const;
+
+  // Get the number of bits that are needed to store this type
+  size_t GetTypeSizeInBits(llvm::Type *type) const;
+
+  // Get the number of bytes between two elements of this type
+  // This also includes the padding
+  size_t GetTypeAllocSize(llvm::Type *type) const;
+
+  // Get the number of bits between two elements of this type
+  // This also includes the padding
+  size_t GetTypeAllocSizeInBits(llvm::Type *type) const;
 
   // Dump the contents of all the code in this context
   void DumpContents() const;
@@ -112,6 +144,7 @@ class CodeContext {
   // Get the data layout
   const llvm::DataLayout &GetDataLayout() const;
 
+ private:
   // Set the current function we're building
   void SetCurrentFunction(FunctionBuilder *func) { func_ = func; }
 
@@ -155,14 +188,16 @@ class CodeContext {
   llvm::PointerType *char_ptr_type_;
 
   // All C/C++ builtin functions and their implementations
-  std::unordered_map<std::string, llvm::Function *> builtins_;
+  std::unordered_map<std::string, std::pair<llvm::Function *, FuncPtr>>
+      builtins_;
 
   // The functions needed in this module, and their implementations. If the
   // function has not been compiled yet, the function pointer will be NULL. The
   // function pointers are populated in Compile()
   std::vector<std::pair<llvm::Function *, FuncPtr>> functions_;
 
-  std::unordered_map<std::string, FuncPtr> function_symbols_;
+  // Shows if the Verify() has been run
+  bool is_verified_;
 
  private:
   // This class cannot be copy or move-constructed

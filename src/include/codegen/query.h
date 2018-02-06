@@ -17,6 +17,7 @@
 #include "codegen/query_parameters.h"
 #include "codegen/parameter_cache.h"
 #include "executor/executor_context.h"
+#include "storage/storage_manager.h"
 
 namespace peloton {
 
@@ -43,6 +44,8 @@ class QueryResultConsumer;
 class Query {
  public:
   struct RuntimeStats {
+    double jit_compile_ms = 0.0;
+    double bytecode_compile_ms = 0.0;
     double init_ms = 0.0;
     double plan_ms = 0.0;
     double tear_down_ms = 0.0;
@@ -54,10 +57,20 @@ class Query {
     llvm::Function *tear_down_func;
   };
 
+  // We use this handy class for the parameters to the llvm functions
+  // to avoid complex casting and pointer manipulation
+  struct FunctionArguments {
+    storage::StorageManager *storage_manager;
+    executor::ExecutorContext *executor_context;
+    QueryParameters *query_parameters;
+    char *consumer_arg;
+    char rest[0];
+  } PACKED;
+
   // Setup this query statement with the given LLVM function components. The
   // provided functions perform initialization, execution and tear down of
   // this query.
-  bool Prepare(const QueryFunctions &funcs);
+  void Prepare(const QueryFunctions &funcs);
 
   /**
    * @brief Executes the compiled query.
@@ -91,6 +104,13 @@ class Query {
   // Constructor
   Query(const planner::AbstractPlan &query_plan);
 
+  // Compile the ir and execute it (compilation path)
+  bool CompileAndExecute(FunctionArguments *function_arguments,
+                         RuntimeStats *stats);
+
+  // Interpret the ir (interpretation path)
+  bool Interpret(FunctionArguments *function_arguments, RuntimeStats *stats);
+
  private:
   // The query plan
   const planner::AbstractPlan &query_plan_;
@@ -101,11 +121,10 @@ class Query {
   // The size of the parameter the functions take
   RuntimeState runtime_state_;
 
-  // The init(), plan() and tearDown() functions
-  typedef void (*compiled_function_t)(char *);
-  compiled_function_t init_func_;
-  compiled_function_t plan_func_;
-  compiled_function_t tear_down_func_;
+  // The llvm ir of the init(), plan() and tearDown() functions
+  QueryFunctions query_funcs_;
+
+  typedef void (*compiled_function_t)(FunctionArguments *);
 
  private:
   // This class cannot be copy or move-constructed

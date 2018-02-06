@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <codegen/testing_codegen_util.h>
 #include "codegen/testing_codegen_util.h"
 
 #include "catalog/table_catalog.h"
@@ -170,25 +171,29 @@ void PelotonCodeGenTest::LoadTestTable(oid_t table_id, uint32_t num_rows,
   txn_manager.CommitTransaction(txn);
 }
 
-void PelotonCodeGenTest::ExecuteSync(
+codegen::Query::RuntimeStats PelotonCodeGenTest::ExecuteSync(
     codegen::Query &query,
     std::unique_ptr<executor::ExecutorContext> executor_context,
     codegen::QueryResultConsumer &consumer) {
   std::mutex mu;
   std::condition_variable cond;
   bool finished = false;
+  codegen::Query::RuntimeStats stats;
+
   query.Execute(std::move(executor_context), consumer,
                 [&](executor::ExecutionResult) {
                   std::unique_lock<decltype(mu)> lock(mu);
                   finished = true;
                   cond.notify_one();
-                });
+                }, &stats);
 
   std::unique_lock<decltype(mu)> lock(mu);
   cond.wait(lock, [&] { return finished; });
+
+  return stats;
 }
 
-codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecute(
+PelotonCodeGenTest::CodeGenStats PelotonCodeGenTest::CompileAndExecute(
     planner::AbstractPlan &plan, codegen::QueryResultConsumer &consumer) {
   codegen::QueryParameters parameters(plan, {});
 
@@ -197,12 +202,12 @@ codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecute(
   auto *txn = txn_manager.BeginTransaction();
 
   // Compile the query.
-  codegen::QueryCompiler::CompileStats stats;
+  CodeGenStats stats;
   auto compiled_query = codegen::QueryCompiler().Compile(
-      plan, parameters.GetQueryParametersMap(), consumer, &stats);
+      plan, parameters.GetQueryParametersMap(), consumer, &stats.compile_stats);
 
   // Execute the query.
-  ExecuteSync(*compiled_query,
+  stats.runtime_stats = ExecuteSync(*compiled_query,
               std::unique_ptr<executor::ExecutorContext>(
                   new executor::ExecutorContext(txn, std::move(parameters))),
               consumer);
@@ -213,7 +218,7 @@ codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecute(
   return stats;
 }
 
-codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecuteCache(
+PelotonCodeGenTest::CodeGenStats PelotonCodeGenTest::CompileAndExecuteCache(
     std::shared_ptr<planner::AbstractPlan> plan,
     codegen::QueryResultConsumer &consumer, bool &cached,
     std::vector<type::Value> params) {
@@ -226,19 +231,19 @@ codegen::QueryCompiler::CompileStats PelotonCodeGenTest::CompileAndExecuteCache(
                                     codegen::QueryParameters(*plan, params)));
 
   // Compile
-  codegen::QueryCompiler::CompileStats stats;
+  CodeGenStats stats;
   codegen::Query *query = codegen::QueryCache::Instance().Find(plan);
   cached = (query != nullptr);
   if (query == nullptr) {
     codegen::QueryCompiler compiler;
     auto compiled_query = compiler.Compile(
-        *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
+        *plan, executor_context->GetParams().GetQueryParametersMap(), consumer, &stats.compile_stats);
     query = compiled_query.get();
     codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
   }
 
   // Execute the query.
-  ExecuteSync(*query, std::move(executor_context), consumer);
+  stats.runtime_stats = ExecuteSync(*query, std::move(executor_context), consumer);
 
   // Commit the transaction.
   txn_manager.CommitTransaction(txn);
@@ -380,6 +385,38 @@ void Printer::ConsumeResult(codegen::ConsumerContext &ctx,
 
   // Make the printf call
   codegen.CallPrintf(format, cols);
+}
+
+PelotonCodeGenTest::CodeGenStats operator+(const PelotonCodeGenTest::CodeGenStats& a, const PelotonCodeGenTest::CodeGenStats& b) {
+  PelotonCodeGenTest::CodeGenStats stats = a;
+
+  stats.compile_stats.setup_ms += b.compile_stats.setup_ms;
+  stats.compile_stats.optimize_ms += b.compile_stats.optimize_ms;
+  stats.compile_stats.ir_gen_ms += b.compile_stats.ir_gen_ms;
+
+  stats.runtime_stats.bytecode_compile_ms += b.runtime_stats.bytecode_compile_ms;
+  stats.runtime_stats.jit_compile_ms += b.runtime_stats.jit_compile_ms;
+  stats.runtime_stats.init_ms += b.runtime_stats.init_ms;
+  stats.runtime_stats.plan_ms += b.runtime_stats.plan_ms;
+  stats.runtime_stats.tear_down_ms += b.runtime_stats.tear_down_ms;
+
+  return stats;
+}
+
+PelotonCodeGenTest::CodeGenStats operator/(const PelotonCodeGenTest::CodeGenStats& a, double factor) {
+  PelotonCodeGenTest::CodeGenStats stats = a;
+
+  stats.compile_stats.setup_ms /= factor;
+  stats.compile_stats.optimize_ms /= factor;
+  stats.compile_stats.ir_gen_ms /= factor;
+
+  stats.runtime_stats.bytecode_compile_ms /= factor;
+  stats.runtime_stats.jit_compile_ms /= factor;
+  stats.runtime_stats.init_ms /= factor;
+  stats.runtime_stats.plan_ms /= factor;
+  stats.runtime_stats.tear_down_ms /= factor;
+
+  return stats;
 }
 
 }  // namespace test

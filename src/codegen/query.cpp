@@ -10,11 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <include/codegen/query_compiler.h>
 #include "codegen/query.h"
 #include "codegen/query_result_consumer.h"
 #include "common/timer.h"
 #include "executor/plan_executor.h"
-#include "storage/storage_manager.h"
+#include "codegen/interpreter/context_builder.h"
+#include "codegen/interpreter/query_interpreter.h"
+#include "settings/settings_manager.h"
 
 namespace peloton {
 namespace codegen {
@@ -31,21 +34,13 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
 
   llvm::Type *runtime_state_type = runtime_state_.FinalizeType(codegen);
   size_t parameter_size = codegen.SizeOf(runtime_state_type);
-  PL_ASSERT((parameter_size % 8 == 0) && "parameter size not multiple of 8");
+  PL_ASSERT((parameter_size % 8 == 0) &&
+      parameter_size >= sizeof(FunctionArguments) && "parameter size not multiple of 8");
 
   // Allocate some space for the function arguments
   std::unique_ptr<char[]> param_data{new char[parameter_size]};
   char *param = param_data.get();
   PL_MEMSET(param, 0, parameter_size);
-
-  // We use this handy class to avoid complex casting and pointer manipulation
-  struct FunctionArguments {
-    storage::StorageManager *storage_manager;
-    executor::ExecutorContext *executor_context;
-    QueryParameters *query_parameters;
-    char *consumer_arg;
-    char rest[0];
-  } PACKED;
 
   // Set up the function arguments
   auto *func_args = reinterpret_cast<FunctionArguments *>(param_data.get());
@@ -54,17 +49,96 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   func_args->query_parameters = &executor_context->GetParams();
   func_args->consumer_arg = consumer.GetConsumerState();
 
+  //bool force_interpreter = settings::SettingsManager::GetBool(settings::SettingId::codegen_interpreter);
+  bool force_interpreter = true;
+  if (force_interpreter) {
+    try {
+      Interpret(func_args, stats);
+    } catch (interpreter::NotSupportedException e) {
+      // DEBUG
+      LOG_INFO("query not supported by interpreter: %s", e.what());
+      CompileAndExecute(func_args, stats);
+    }
+  } else {
+    CompileAndExecute(func_args, stats);
+  }
+
+  executor::ExecutionResult result;
+  result.m_result = ResultType::SUCCESS;
+  result.m_processed = executor_context->num_processed;
+  on_complete(result);
+}
+
+void Query::Prepare(const QueryFunctions &query_funcs) {
+  query_funcs_ = query_funcs;
+
+  // verify the functions
+  // will also be done by Optimize() or Compile() if not done before,
+  // but we do not want to mix up the timings, so do it here
+  code_context_.Verify();
+
+  // optimize the functions
+  // TODO: add switch to enable/disable optimization
+  // TODO: add timer to measure time used for optimization (see RuntimeStats)
+  code_context_.Optimize();
+}
+
+bool Query::CompileAndExecute(FunctionArguments *function_arguments,
+                              RuntimeStats *stats) {
   // Timer
   Timer<std::ratio<1, 1000>> timer;
-  timer.Start();
+  if (stats != nullptr) {
+    timer.Start();
+  }
+
+  // Step 1: Compile all functions in context
+  LOG_TRACE("Setting up Query ...");
+
+  // TODO: for now Compile() will always return true, find a way to catch
+  // compilation errors from LLVM
+  if (!code_context_.Compile()) {
+    return false;
+  }
+
+  // Get pointers to the JITed functions
+  compiled_function_t init_func_ptr =
+      (compiled_function_t)code_context_.GetRawFunctionPointer(
+          query_funcs_.init_func);
+  PL_ASSERT(init_func_ptr != nullptr);
+
+  compiled_function_t plan_func_ptr =
+      (compiled_function_t)code_context_.GetRawFunctionPointer(
+          query_funcs_.plan_func);
+  PL_ASSERT(plan_func_ptr != nullptr);
+
+  compiled_function_t tear_down_func_ptr =
+      (compiled_function_t)code_context_.GetRawFunctionPointer(
+          query_funcs_.tear_down_func);
+  PL_ASSERT(tear_down_func_ptr != nullptr);
+
+  LOG_TRACE("Query has been setup ...");
+
+  // Timer for JIT compilation
+  if (stats != nullptr) {
+    timer.Stop();
+    stats->jit_compile_ms = timer.GetDuration();
+    timer.Reset();
+  }
+
+  // Step 2: Execute query
+
+  // Start timer
+  if (stats != nullptr) {
+    timer.Start();
+  }
 
   // Call init
   LOG_TRACE("Calling query's init() ...");
   try {
-    init_func_(param);
+    init_func_ptr(function_arguments);
   } catch (...) {
     // Cleanup if an exception is encountered
-    tear_down_func_(param);
+    tear_down_func_ptr(function_arguments);
     throw;
   }
 
@@ -79,10 +153,10 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
-    plan_func_(param);
+    plan_func_ptr(function_arguments);
   } catch (...) {
     // Cleanup if an exception is encountered
-    tear_down_func_(param);
+    tear_down_func_ptr(function_arguments);
     throw;
   }
 
@@ -96,7 +170,7 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
 
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
-  tear_down_func_(param);
+  tear_down_func_ptr(function_arguments);
 
   // No need to cleanup if we get an exception while cleaning up...
   if (stats != nullptr) {
@@ -104,38 +178,85 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
     stats->tear_down_ms = timer.GetDuration();
   }
 
-  executor::ExecutionResult result;
-  result.m_result = ResultType::SUCCESS;
-  result.m_processed = executor_context->num_processed;
-  on_complete(result);
+  return true;
 }
 
-bool Query::Prepare(const QueryFunctions &query_funcs) {
-  LOG_TRACE("Going to JIT the query ...");
+bool Query::Interpret(FunctionArguments *function_arguments,
+                      RuntimeStats *stats) {
+  LOG_INFO("Using codegen interpreter to execute plan");
 
-  // Compile the code
-  if (!code_context_.Compile()) {
-    return false;
+  // Timer
+  Timer<std::ratio<1, 1000>> timer;
+  if (stats != nullptr) {
+    timer.Start();
   }
 
-  LOG_TRACE("Setting up Query ...");
+  // Create Bytecode
+  interpreter::ContextBuilder init_builder(code_context_, query_funcs_.init_func);
+  interpreter::InterpreterContext init_bytecode = init_builder.CreateInterpreterContext();
+  interpreter::ContextBuilder plan_builder(code_context_, query_funcs_.plan_func);
+  interpreter::InterpreterContext plan_bytecode = plan_builder.CreateInterpreterContext();
+  interpreter::ContextBuilder tear_down_builder(code_context_, query_funcs_.tear_down_func);
+  interpreter::InterpreterContext tear_down_bytecode = tear_down_builder.CreateInterpreterContext();
 
-  // Get pointers to the JITed functions
-  init_func_ = (compiled_function_t)code_context_.GetRawFunctionPointer(
-      query_funcs.init_func);
-  PL_ASSERT(init_func_ != nullptr);
+  // Time initialization
+  if (stats != nullptr) {
+    timer.Stop();
+    stats->bytecode_compile_ms = timer.GetDuration();
+    timer.Reset();
+    timer.Start();
+  }
 
-  plan_func_ = (compiled_function_t)code_context_.GetRawFunctionPointer(
-      query_funcs.plan_func);
-  PL_ASSERT(plan_func_ != nullptr);
+  // Call init
+  LOG_TRACE("Calling query's init() ...");
+  try {
+    interpreter::QueryInterpreter init_interpreter(init_bytecode);
+    init_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+  } catch (...) {
+    interpreter::QueryInterpreter tear_down_interpreter(tear_down_bytecode);
+    tear_down_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+    throw;
+  }
 
-  tear_down_func_ = (compiled_function_t)code_context_.GetRawFunctionPointer(
-      query_funcs.tear_down_func);
-  PL_ASSERT(tear_down_func_ != nullptr);
 
-  LOG_TRACE("Query has been setup ...");
+  if (stats != nullptr) {
+    timer.Stop();
+    stats->init_ms = timer.GetDuration();
+    timer.Reset();
+    timer.Start();
+  }
 
-  // All is well
+  // Execute the query!
+  LOG_TRACE("Calling query's plan() ...");
+  try {
+    interpreter::QueryInterpreter plan_interpreter(plan_bytecode);
+    plan_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+  } catch (...) {
+    interpreter::QueryInterpreter tear_down_interpreter(tear_down_bytecode);
+    tear_down_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+    throw;
+  }
+
+  // Timer plan execution
+  if (stats != nullptr) {
+    timer.Stop();
+    stats->plan_ms = timer.GetDuration();
+    timer.Reset();
+    timer.Start();
+  }
+
+  // Clean up
+  LOG_TRACE("Calling query's tearDown() ...");
+  interpreter::QueryInterpreter tear_down_interpreter(tear_down_bytecode);
+  tear_down_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+
+  // No need to cleanup if we get an exception while cleaning up...
+  if (stats != nullptr) {
+    timer.Stop();
+    stats->tear_down_ms = timer.GetDuration();
+  }
+
+  // TODO(marcel): return value
   return true;
 }
 
