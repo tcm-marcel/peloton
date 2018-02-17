@@ -190,6 +190,7 @@ elif [ "$DISTRO" = "DARWIN" ]; then
     brew install llvm@3.7
     brew install postgresql
     brew install libunwind-headers
+    brew install xz
 
 ## ------------------------------------------------
 ## UNKNOWN

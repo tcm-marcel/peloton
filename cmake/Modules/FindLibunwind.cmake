@@ -13,14 +13,18 @@ elif(NOT EXISTS "${LIBUNWIND_INCLUDE_DIR}/unwind.h")
 endif()
  
 FIND_LIBRARY(LIBUNWIND_GENERIC_LIBRARY "unwind")
-if (NOT LIBUNWIND_GENERIC_LIBRARY)
+if (APPLE)
+    SET(LIBUNWIND_GENERIC_LIBRARY "")
+elseif (NOT LIBUNWIND_GENERIC_LIBRARY)
     MESSAGE(FATAL_ERROR "failed to find unwind generic library")
 endif ()
 SET(LIBUNWIND_LIBRARIES ${LIBUNWIND_GENERIC_LIBRARY})
 
 # For some reason, we have to link to two libunwind shared object files:
 # one arch-specific and one not.
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
+if (APPLE)
+    SET(LIBUNWIND_ARCH FALSE)
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
     SET(LIBUNWIND_ARCH "arm")
 elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64")
     SET(LIBUNWIND_ARCH "x86_64")
