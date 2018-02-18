@@ -43,6 +43,7 @@ func(op, i8) \
 func(op, i16) \
 func(op, i32) \
 func(op, i64) \
+func(op, float) \
 func(op, double)
 
 #define GET_FIRST_ALL_TYPES(op) (op ## _i8)
@@ -56,9 +57,10 @@ func(op, i64)
 #define GET_FIRST_INT_TYPES(op) (op ## _i8)
 
 #define CREATE_FOR_FLOAT_TYPES(func, op) \
+func(op, float) \
 func(op, double)
 
-#define GET_FIRST_FLOAT_TYPES(op) (op ## _double)
+#define GET_FIRST_FLOAT_TYPES(op) (op ## _float)
 
 
 CREATE_FOR_ALL_TYPES(HANDLE_TYPED_INST, add)
@@ -109,6 +111,10 @@ CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, doubletosi)
 CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, doubletoui)
 CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, sitodouble)
 CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, uitodouble)
+CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, floattosi)
+CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, floattoui)
+CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, sitofloat)
+CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, uitofloat)
 
 HANDLE_INST(gep_offset)                            // struct access of GEP instruction (accumulated)
 CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, gep_array) // array access of GEP instruction (inline)

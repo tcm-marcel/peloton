@@ -67,8 +67,10 @@ Opcode ContextBuilder::GetOpcodeForTypeAllTypes(Opcode untyped_op,
     return InterpreterContext::GetOpcodeFromId(id + 2);
   else if (type == code_context_.int64_type_ || type == code_context_.char_ptr_type_ || type->isPointerTy())
     return InterpreterContext::GetOpcodeFromId(id + 3);
-  else if (type == code_context_.double_type_)
+  else if (type == code_context_.float_type_)
     return InterpreterContext::GetOpcodeFromId(id + 4);
+  else if (type == code_context_.double_type_)
+    return InterpreterContext::GetOpcodeFromId(id + 5);
   else
     throw NotSupportedException("llvm type not supported");
 }
@@ -94,8 +96,10 @@ Opcode ContextBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
   index_t id = InterpreterContext::GetOpcodeId(untyped_op);
 
   // float is missing!
-  if (type == code_context_.double_type_)
+  if (type == code_context_.float_type_)
     return InterpreterContext::GetOpcodeFromId(id + 0);
+  if (type == code_context_.double_type_)
+    return InterpreterContext::GetOpcodeFromId(id + 1);
   else
     throw NotSupportedException("llvm type not supported");
 }
@@ -867,26 +871,46 @@ void ContextBuilder::TranslateFloatIntCast(llvm::Instruction *instruction) {
 
   Opcode opcode = Opcode::undefined;
 
-  if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletosi), cast_instruction->getType());
+  if (instruction->getOpcode() == llvm::Instruction::FPToSI) {
+    if (cast_instruction->getOperand(0)->getType() != code_context_.float_type_)
+      opcode = GET_FIRST_INT_TYPES(Opcode::floattosi);
+    else if (cast_instruction->getOperand(0)->getType() != code_context_.double_type_)
+      opcode = GET_FIRST_INT_TYPES(Opcode::doubletosi);
+    else
+      throw NotSupportedException("llvm fp type not supported");
 
-    if (cast_instruction->getOperand(0)->getType() != code_context_.double_type_)
-      throw NotSupportedException("only double casts supported");
+    opcode = GetOpcodeForTypeIntTypes(opcode, cast_instruction->getType());
+
+  } else if (instruction->getOpcode() == llvm::Instruction::FPToUI) {
+    if (cast_instruction->getOperand(0)->getType() != code_context_.float_type_)
+      opcode = GET_FIRST_INT_TYPES(Opcode::floattoui);
+    else if (cast_instruction->getOperand(0)->getType() != code_context_.double_type_)
+      opcode = GET_FIRST_INT_TYPES(Opcode::doubletoui);
+    else
+      throw NotSupportedException("llvm fp type not supported");
+
+    opcode = GetOpcodeForTypeIntTypes(opcode, cast_instruction->getType());
+
   } else if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletoui), cast_instruction->getType());
+    if (cast_instruction->getType() != code_context_.float_type_)
+      opcode = GET_FIRST_INT_TYPES(Opcode::sitofloat);
+    else if (cast_instruction->getType() != code_context_.double_type_)
+      opcode = GET_FIRST_INT_TYPES(Opcode::sitodouble);
+    else
+      throw NotSupportedException("llvm fp type not supported");
 
-    if (cast_instruction->getOperand(0)->getType() != code_context_.double_type_)
-      throw NotSupportedException("only double casts supported");
-  } else if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sitodouble), cast_instruction->getOperand(0)->getType());
+    opcode = GetOpcodeForTypeIntTypes(opcode, cast_instruction->getOperand(0)->getType());
 
-    if (cast_instruction->getType() != code_context_.double_type_)
-      throw NotSupportedException("only double casts supported");
-  } else if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::uitodouble), cast_instruction->getOperand(0)->getType());
+  } else if (instruction->getOpcode() == llvm::Instruction::UIToFP) {
+    if (cast_instruction->getType() != code_context_.float_type_)
+      opcode = GET_FIRST_INT_TYPES(Opcode::uitofloat);
+    else if (cast_instruction->getType() != code_context_.double_type_)
+      opcode = GET_FIRST_INT_TYPES(Opcode::uitodouble);
+    else
+      throw NotSupportedException("llvm fp type not supported");
 
-    if (cast_instruction->getType() != code_context_.double_type_)
-      throw NotSupportedException("only double casts supported");
+    opcode = GetOpcodeForTypeIntTypes(opcode, cast_instruction->getOperand(0)->getType());
+
   } else {
     throw NotSupportedException("unsupported cast instruction");
   }

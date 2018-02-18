@@ -183,6 +183,7 @@ class CodeContext {
   llvm::Type *int16_type_;
   llvm::Type *int32_type_;
   llvm::Type *int64_type_;
+  llvm::Type *float_type_;
   llvm::Type *double_type_;
   llvm::Type *void_type_;
   llvm::PointerType *char_ptr_type_;

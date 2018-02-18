@@ -371,7 +371,7 @@ class QueryInterpreter {
 
 
 
-
+/*
   template <typename type_t>
   ALWAYS_INLINE inline const Instruction *doubletosiHandler(const Instruction *instruction) {
     static_assert(std::is_integral<type_t>::value, "__func__ must only be used with integer types");
@@ -401,6 +401,91 @@ class QueryInterpreter {
     SetValue<double>(instruction->args[0], (static_cast<double>(GetValue<type_t>(instruction->args[1]))));
     return AdvanceIP<1>(instruction);
   }
+*/
+
+  // The FP<>Int casts are created in a two-level hierarchy
+  // eg. the generated call to floattosiHandler<i8> is redirected to tosiHandler<float, i8>
+
+  template <typename src_type_t, typename dest_type_t>
+  ALWAYS_INLINE inline const Instruction *tosiHandler(const Instruction *instruction) {
+    static_assert(std::is_integral<dest_type_t>::value, "__func__ dest_type must be an integer type");
+    static_assert(std::is_floating_point<src_type_t>::value, "__func__ src_type must be a floating point type");
+    using dest_type_signed_t = typename std::make_signed<dest_type_t>::type;
+
+    SetValue<dest_type_signed_t>(instruction->args[0], (static_cast<dest_type_signed_t>(GetValue<src_type_t>(instruction->args[1]))));
+    return AdvanceIP<1>(instruction);
+  }
+
+  template <typename src_type_t, typename dest_type_t>
+  ALWAYS_INLINE inline const Instruction *touiHandler(const Instruction *instruction) {
+    static_assert(std::is_integral<dest_type_t>::value, "__func__ dest_type must be an integer type");
+    static_assert(std::is_floating_point<src_type_t>::value, "__func__ src_type must be a floating point type");
+
+    SetValue<dest_type_t>(instruction->args[0], (static_cast<dest_type_t>(GetValue<src_type_t>(instruction->args[1]))));
+    return AdvanceIP<1>(instruction);
+  }
+
+  template <typename src_type_t, typename dest_type_t>
+  ALWAYS_INLINE inline const Instruction *sitoHandler(const Instruction *instruction) {
+    static_assert(std::is_floating_point<dest_type_t>::value, "__func__ dest_type must be a floating point type");
+    static_assert(std::is_integral<src_type_t>::value, "__func__ src_type must be an integer type");
+    using src_type_signed_t = typename std::make_signed<src_type_t>::type;
+
+    SetValue<dest_type_t>(instruction->args[0], (static_cast<dest_type_t>(GetValue<src_type_signed_t>(instruction->args[1]))));
+    return AdvanceIP<1>(instruction);
+  }
+
+  template <typename src_type_t, typename dest_type_t>
+  ALWAYS_INLINE inline const Instruction *uitoHandler(const Instruction *instruction) {
+    static_assert(std::is_floating_point<dest_type_t>::value, "__func__ dest_type must be a floating point type");
+    static_assert(std::is_integral<src_type_t>::value, "__func__ src_type must be an integer type");
+
+    SetValue<dest_type_t>(instruction->args[0], (static_cast<dest_type_t>(GetValue<src_type_t>(instruction->args[1]))));
+    return AdvanceIP<1>(instruction);
+  }
+
+
+
+  template <typename type_t>
+  ALWAYS_INLINE inline const Instruction *floattosiHandler(const Instruction *instruction) {
+    return tosiHandler<float, type_t>(instruction);
+  }
+
+  template <typename type_t>
+  ALWAYS_INLINE inline const Instruction *floattouiHandler(const Instruction *instruction) {
+    return touiHandler<float, type_t>(instruction);
+  }
+
+  template <typename type_t>
+  ALWAYS_INLINE inline const Instruction *sitofloatHandler(const Instruction *instruction) {
+    return sitoHandler<type_t, float>(instruction);
+  }
+
+  template <typename type_t>
+  ALWAYS_INLINE inline const Instruction *uitofloatHandler(const Instruction *instruction) {
+    return uitoHandler<type_t, float>(instruction);
+  }
+
+  template <typename type_t>
+  ALWAYS_INLINE inline const Instruction *doubletosiHandler(const Instruction *instruction) {
+    return tosiHandler<double, type_t>(instruction);
+  }
+
+  template <typename type_t>
+  ALWAYS_INLINE inline const Instruction *doubletouiHandler(const Instruction *instruction) {
+    return touiHandler<double, type_t>(instruction);
+  }
+
+  template <typename type_t>
+  ALWAYS_INLINE inline const Instruction *sitodoubleHandler(const Instruction *instruction) {
+    return sitoHandler<type_t, double>(instruction);
+  }
+
+  template <typename type_t>
+  ALWAYS_INLINE inline const Instruction *uitodoubleHandler(const Instruction *instruction) {
+    return uitoHandler<type_t, double>(instruction);
+  }
+
 
 
 

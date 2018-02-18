@@ -49,8 +49,8 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   func_args->query_parameters = &executor_context->GetParams();
   func_args->consumer_arg = consumer.GetConsumerState();
 
-  bool force_interpreter = settings::SettingsManager::GetBool(settings::SettingId::codegen_interpreter);
-  //bool force_interpreter = true;
+  //bool force_interpreter = settings::SettingsManager::GetBool(settings::SettingId::codegen_interpreter);
+  bool force_interpreter = true;
   if (force_interpreter) {
     try {
       Interpret(func_args, stats);
