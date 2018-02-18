@@ -81,7 +81,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     txn_manager.CommitTransaction(txn);
   }
 
-  void AddRows(unsigned long number_rows) {
+  void AddRows(unsigned long number_rows, unsigned long start_index = 0) {
     auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
     auto *txn = txn_manager.BeginTransaction();
 
@@ -93,12 +93,13 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
       storage::Tuple tuple{table_schema, true};
       for (uint32_t j = 0; j < table_schema->GetColumnCount(); j++) {
         auto col = table_schema->GetColumn(j);
-        tuple.SetValue(j, type::ValueFactory::GetIntegerValue(i));
+        tuple.SetValue(j, type::ValueFactory::GetIntegerValue(start_index + i));
       }
 
       ItemPointer *index_entry_ptr = nullptr;
       ItemPointer tuple_slot_id =
           table.InsertTuple(&tuple, txn, &index_entry_ptr);
+
       PL_ASSERT(tuple_slot_id.block != INVALID_OID);
       PL_ASSERT(tuple_slot_id.offset != INVALID_OID);
 
@@ -119,7 +120,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   }
 
   CodeGenStats RunCodegenPlanXTimes(planner::AbstractPlan &plan,
-                       unsigned int number_runs) {
+                       unsigned int number_runs, unsigned long expected_rows) {
     // Do binding
     planner::BindingContext context;
     plan.PerformBinding(context);
@@ -129,15 +130,33 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     for (unsigned int i = 0; i < number_runs; i++) {
       // Printing consumer
       codegen::BufferingConsumer buffer{{0, 1, 2}, context};
+      codegen::QueryParameters parameters(plan, {});
 
       // COMPILE and execute
-      CodeGenStats current_stats = CompileAndExecute(plan, buffer);
+      // Start a transaction.
+      auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+      auto *txn = txn_manager.BeginTransaction(); //IsolationLevelType::READ_ONLY);
+
+      // Compile the query.
+      CodeGenStats current_stats;
+      auto compiled_query = codegen::QueryCompiler().Compile(
+          plan, parameters.GetQueryParametersMap(), buffer, &stats.compile_stats);
+
+      // Execute the query.
+      current_stats.runtime_stats = ExecuteSync(*compiled_query,
+                                        std::unique_ptr<executor::ExecutorContext>(
+                                            new executor::ExecutorContext(txn, std::move(parameters))),
+                                                buffer);
+
+      // Commit the transaction.
+      txn_manager.CommitTransaction(txn);
+
       stats = stats + current_stats;
 
       // Check that we got all the results
-      //const auto &results = buffer.GetOutputTuples();
+      const auto &results = buffer.GetOutputTuples();
 
-      //EXPECT_EQ(number_rows, results.size());
+      EXPECT_EQ(expected_rows, results.size());
     }
 
     stats = stats / number_runs;
@@ -145,10 +164,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   }
 
   double RunExecutorPlanXTimes(planner::AbstractPlan &plan,
-                               unsigned int number_runs) {
-    auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
-    auto *txn = txn_manager.BeginTransaction();
-
+                               unsigned int number_runs, unsigned long expected_rows) {
     // Timer
     Timer<std::ratio<1, 1000>> timer;
     double overall_stats = 0;
@@ -165,14 +181,22 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
       std::shared_ptr<planner::AbstractPlan> plan_sp =
           CreateFakeSharedPtr(&plan);
 
+      auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+      auto *txn = txn_manager.BeginTransaction(); //IsolationLevelType::READ_ONLY);
+
       timer.Start();
 
       executor::PlanExecutor::ExecutePlan(plan_sp, txn, {}, result_format, on_complete);
       timer.Stop();
+
+
+      // Commit the transaction.
+      txn_manager.CommitTransaction(txn);
+
       overall_stats += timer.GetDuration();
       timer.Reset();
 
-      //EXPECT_EQ(number_rows, result.size() / 3);
+      EXPECT_EQ(expected_rows, result.size() / 3);
     }
 
     return overall_stats / number_runs;
@@ -223,24 +247,26 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectStar) {
   // SELECT a, b, c FROM table;
   //
 
-  // Configuration
-  unsigned int number_runs = 5;
-
   // Create Table and insert rows
   CreateTable();
 
+  // Configuration
+  unsigned int number_runs = 5;
   CodeGenStats stats;
 
   for (unsigned int number_rows_pow = 1; number_rows_pow < 7;
        number_rows_pow++) {
+
     unsigned int number_rows = std::pow(10, number_rows_pow);
 
     // Add rows
     // DEBUG hack!
     if (number_rows_pow == 1)
       AddRows(number_rows);
-    else
-      AddRows(number_rows - std::pow(10, number_rows_pow - 1));
+    else {
+      unsigned int existing_rows = std::pow(10, number_rows_pow - 1);
+      AddRows(number_rows - existing_rows, existing_rows);
+    }
 
     // Setup the scan plan node
     planner::SeqScanPlan scan{
@@ -254,7 +280,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectStar) {
     settings::SettingsManager::SetBool(settings::SettingId::codegen_interpreter,
                                        true);
 
-    stats = RunCodegenPlanXTimes(scan, number_runs);
+    stats = RunCodegenPlanXTimes(scan, number_runs, number_rows);
     OutputStats(typeid(*this).name(), "interpreter", number_rows, number_runs, stats);
 
     // Force interpreter off
@@ -265,7 +291,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectStar) {
     // (2) run with codegen
     //===----------------------------------------------------------------------===//
 
-    stats = RunCodegenPlanXTimes(scan, number_runs);
+    stats = RunCodegenPlanXTimes(scan, number_runs, number_rows);
     OutputStats(typeid(*this).name(), "codegen", number_rows, number_runs, stats);
 
     //===----------------------------------------------------------------------===//
@@ -275,7 +301,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectStar) {
     // Force codegen off
     settings::SettingsManager::SetBool(settings::SettingId::codegen, false);
 
-    double runtime = RunExecutorPlanXTimes(scan, number_runs);
+    double runtime = RunExecutorPlanXTimes(scan, number_runs, number_rows);
     OutputStats(typeid(*this).name(), "legacy", number_rows, number_runs, runtime);
 
     // Turn codegen on again
@@ -293,34 +319,37 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectPredicate) {
 
   // Configuration
   unsigned int number_runs = 5;
-
-  // Create Table and insert rows
-  CreateTable();
-
   CodeGenStats stats;
+
+  // Create Table
+  CreateTable();
 
   for (unsigned int number_rows_pow = 1; number_rows_pow < 7;
        number_rows_pow++) {
+
     unsigned int number_rows = std::pow(10, number_rows_pow);
 
     // Add rows
     // DEBUG hack!
     if (number_rows_pow == 1)
       AddRows(number_rows);
-    else
-      AddRows(number_rows - std::pow(10, number_rows_pow - 1));
+    else {
+      unsigned int existing_rows = std::pow(10, number_rows_pow - 1);
+      AddRows(number_rows - existing_rows, existing_rows);
+    }
 
     for (unsigned int selectivity = 0; selectivity <= 100; selectivity += 20) {
       auto selectivity_string = std::to_string(selectivity) + "%";
       int64_t threshold = number_rows * selectivity / 100;
+      unsigned long expected_rows = threshold;
 
       // Setup the predicate
-      ExpressionPtr b_le =
-          CmpLteExpr(ColRefExpr(type::TypeId::INTEGER, 1), ConstIntExpr(threshold));
+      ExpressionPtr b_lt =
+          CmpLtExpr(ColRefExpr(type::TypeId::INTEGER, 1), ConstIntExpr(threshold));
 
       // Setup the scan plan node
       planner::SeqScanPlan scan{
-          GetDatabase().GetTableWithName(table_name), b_le.release(),
+          GetDatabase().GetTableWithName(table_name), b_lt.release(),
           {0, 1, 2}};
 
       //===----------------------------------------------------------------------===//
@@ -331,7 +360,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectPredicate) {
       settings::SettingsManager::SetBool(settings::SettingId::codegen_interpreter,
                                          true);
 
-      stats = RunCodegenPlanXTimes(scan, number_runs);
+      stats = RunCodegenPlanXTimes(scan, number_runs, expected_rows);
       OutputStats(typeid(*this).name(),
                   "interpreter",
                   number_rows,
@@ -346,7 +375,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectPredicate) {
       // (2) run with codegen
       //===----------------------------------------------------------------------===//
 
-      stats = RunCodegenPlanXTimes(scan, number_runs);
+      stats = RunCodegenPlanXTimes(scan, number_runs, expected_rows);
       OutputStats(typeid(*this).name(),
                   "codegen",
                   number_rows,
@@ -360,7 +389,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectPredicate) {
       // Force codegen off
       settings::SettingsManager::SetBool(settings::SettingId::codegen, false);
 
-      double runtime = RunExecutorPlanXTimes(scan, number_runs);
+      double runtime = RunExecutorPlanXTimes(scan, number_runs, expected_rows);
       OutputStats(typeid(*this).name(),
                   "legacy",
                   number_rows,
@@ -383,38 +412,41 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectPredicate2) {
 
   // Configuration
   unsigned int number_runs = 5;
+  CodeGenStats stats;
 
   // Create Table and insert rows
   CreateTable();
 
-  CodeGenStats stats;
-
   for (unsigned int number_rows_pow = 1; number_rows_pow < 7;
        number_rows_pow++) {
+
     unsigned int number_rows = std::pow(10, number_rows_pow);
 
     // Add rows
     // DEBUG hack!
     if (number_rows_pow == 1)
       AddRows(number_rows);
-    else
-      AddRows(number_rows - std::pow(10, number_rows_pow - 1));
+    else {
+      unsigned int existing_rows = std::pow(10, number_rows_pow - 1);
+      AddRows(number_rows - existing_rows, existing_rows);
+    }
 
     for (unsigned int selectivity = 0; selectivity <= 100; selectivity += 20) {
       auto selectivity_string = std::to_string(selectivity) + "%";
       int64_t threshold = number_rows * selectivity / 100;
+      unsigned long expected_rows = threshold;
 
       // Setup the predicate
-      // ((b <= t && a > 0) || c > t)
-      //    sel       true     false
-      ExpressionPtr b_le =
-          CmpLteExpr(ColRefExpr(type::TypeId::INTEGER, 1), ConstIntExpr(threshold));
+      // ((b < t && a > 0) || c > t)
+      //    sel      true     false
+      ExpressionPtr b_lt =
+          CmpLtExpr(ColRefExpr(type::TypeId::INTEGER, 1), ConstIntExpr(threshold));
+      ExpressionPtr a_ge =
+          CmpGteExpr(ColRefExpr(type::TypeId::INTEGER, 0), ConstIntExpr(0));
       ExpressionPtr c_gt =
           CmpGtExpr(ColRefExpr(type::TypeId::INTEGER, 2), ConstIntExpr(threshold));
-      ExpressionPtr a_gt =
-          CmpGtExpr(ColRefExpr(type::TypeId::INTEGER, 0), ConstIntExpr(0));
-      ExpressionPtr conj_and = ExpressionPtr{new expression::ConjunctionExpression(ExpressionType::CONJUNCTION_AND, b_le.release(), a_gt.release())};
-      ExpressionPtr conj_or = ExpressionPtr{new expression::ConjunctionExpression(ExpressionType::CONJUNCTION_AND, conj_and.release(), c_gt.release())};
+      //ExpressionPtr conj_and = ExpressionPtr{new expression::ConjunctionExpression(ExpressionType::CONJUNCTION_AND, b_lt.release(), a_ge.release())};
+      ExpressionPtr conj_or = ExpressionPtr{new expression::ConjunctionExpression(ExpressionType::CONJUNCTION_OR, b_lt.release(), c_gt.release())};
 
       // Setup the scan plan node
       planner::SeqScanPlan scan{
@@ -429,7 +461,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectPredicate2) {
       settings::SettingsManager::SetBool(settings::SettingId::codegen_interpreter,
                                          true);
 
-      stats = RunCodegenPlanXTimes(scan, number_runs);
+      stats = RunCodegenPlanXTimes(scan, number_runs, expected_rows);
       OutputStats(typeid(*this).name(),
                   "interpreter",
                   number_rows,
@@ -444,7 +476,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectPredicate2) {
       // (2) run with codegen
       //===----------------------------------------------------------------------===//
 
-      stats = RunCodegenPlanXTimes(scan, number_runs);
+      stats = RunCodegenPlanXTimes(scan, number_runs, expected_rows);
       OutputStats(typeid(*this).name(),
                   "codegen",
                   number_rows,
@@ -458,7 +490,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectPredicate2) {
       // Force codegen off
       settings::SettingsManager::SetBool(settings::SettingId::codegen, false);
 
-      double runtime = RunExecutorPlanXTimes(scan, number_runs);
+      double runtime = RunExecutorPlanXTimes(scan, number_runs, expected_rows);
       OutputStats(typeid(*this).name(),
                   "legacy",
                   number_rows,

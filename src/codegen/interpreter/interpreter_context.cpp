@@ -42,7 +42,7 @@ const char *InterpreterContext::GetOpcodeString(Opcode opcode) {
 size_t InterpreterContext::GetInstructionSlotSize(const Instruction* instruction) {
   switch (instruction->op) {
 
-#define HANDLE_INST(op)
+#define HANDLE_INST(op) case Opcode::op: return 1;
 #define HANDLE_EXTERNAL_CALL_INST(op) case Opcode::op: return 2;
 #define HANDLE_INTERNAL_CALL_INST(op) case Opcode::op: return GetInteralCallInstructionSlotSize(reinterpret_cast<const InternalCallInstruction *>(instruction));
 #define HANDLE_SELECT_INST(op) case Opcode::op: return 2;
@@ -51,7 +51,8 @@ size_t InterpreterContext::GetInstructionSlotSize(const Instruction* instruction
 #include "codegen/interpreter/bytecode_instructions.def"
 
     default:
-      return 1;
+      PL_ASSERT(false);
+      return 0;
   }
 }
 
@@ -64,16 +65,7 @@ std::string InterpreterContext::DumpContents() const {
     auto *instruction = GetIPFromIndex(i);
 
     output << Dump(instruction) << std::endl;
-
-    switch (instruction->op) {
-
-#define HANDLE_INST(opcode) i += GetInstructionSlotSize(instruction); break;
-
-#include "codegen/interpreter/bytecode_instructions.def"
-
-      default: break;
-
-    }
+    i += GetInstructionSlotSize(instruction);
   }
 
   // Print Constants

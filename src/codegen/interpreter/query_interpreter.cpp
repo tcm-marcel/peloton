@@ -63,8 +63,6 @@ __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction
   const Instruction *bytecode = reinterpret_cast<const Instruction *>(&context_.bytecode_[0]);
   const Instruction *ip = bytecode;
 
-  printf("Interpreter Execution:\n");
-
   // start with first instruction
   INTERPRETER_DISPATCH_GOTO(ip);
 
