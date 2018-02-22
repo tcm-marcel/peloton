@@ -44,7 +44,7 @@ class QueryInterpreter {
   type_t GetReturnValue();
 
  private:
-  void InitializeActivationRecord();
+  void InitializeActivationRecord(std::vector<value_t> &arguments);
 
   template <typename type_t>
   ALWAYS_INLINE inline type_t GetValue(const index_t index) {
@@ -63,10 +63,10 @@ class QueryInterpreter {
     PL_ASSERT(index >= 0 && index < context_.number_values_);
     *reinterpret_cast<type_t *>(&values_[index]) = value;
 
-#ifdef LOG_DEBUG_ENABLED
+#ifdef LOG_TRACE_ENABLED
     std::ostringstream output;
-    output << "  [" << std::dec << std::setw(3) << index << "] = " << value << "/0x" << std::hex << value;
-    printf("%s\n", output.str().c_str());
+    output << "  [" << std::dec << std::setw(3) << index << "] <= " << value << "/0x" << std::hex << value;
+    LOG_TRACE("%s", output.str().c_str());
 #endif
   }
 
@@ -207,8 +207,14 @@ class QueryInterpreter {
   }
 
   template <typename type_t>
-  ALWAYS_INLINE inline const Instruction *allocaHandler(const Instruction *instruction) {
+  ALWAYS_INLINE inline const Instruction *alloca_arrayHandler(const Instruction *instruction) {
     size_t number_bytes = instruction->args[1] * GetValue<type_t>(instruction->args[2]);
+    SetValue<uintptr_t>(instruction->args[0], (AllocateMemory(number_bytes)));
+    return AdvanceIP<1>(instruction);
+  }
+
+  ALWAYS_INLINE inline const Instruction *allocaHandler(const Instruction *instruction) {
+    size_t number_bytes = instruction->args[1];
     SetValue<uintptr_t>(instruction->args[0], (AllocateMemory(number_bytes)));
     return AdvanceIP<1>(instruction);
   }
@@ -529,7 +535,7 @@ class QueryInterpreter {
              call_activation.return_pointer, reinterpret_cast<void **>(call_activation.value_pointers.data()));
 
     // DEBUG
-#ifdef LOG_DEBUG_ENABLED
+#ifdef LOG_TRACE_ENABLED
     if (context_.external_call_contexts_[call_instruction->external_call_context].dest_type != &ffi_type_void) {
       std::ostringstream output;
       value_t value =
@@ -537,7 +543,7 @@ class QueryInterpreter {
       output << " -> [" << std::dec << std::setw(3)
              << context_.external_call_contexts_[call_instruction->external_call_context].dest_slot
              << "] = " << value << " / 0x" << std::hex << value << ",";
-      printf("%s\n", output.str().c_str());
+      LOG_TRACE("%s\n", output.str().c_str());
     }
 #endif
 

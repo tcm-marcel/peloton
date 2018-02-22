@@ -41,10 +41,6 @@ void QueryInterpreter::ExecuteFunction(char *param) {
 }
 
 __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction(std::vector<value_t> arguments) {
-  if (context_.number_arguments_ != arguments.size()) {
-    throw Exception("llvm function called through interpreter with wrong number of arguments");
-  }
-
   if (label_pointers_[0] == nullptr) {
 
 #define HANDLE_INST(op) label_pointers_[InterpreterContext::GetOpcodeId(Opcode::op)] = &&_ ## op;
@@ -53,12 +49,10 @@ __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction
 
   }
 
-  InitializeActivationRecord();
+  InitializeActivationRecord(arguments);
 
-  // Init function arguments
-  for (size_t i = 0; i < arguments.size(); ++i) {
-    SetValue<value_t>(i + 1, arguments[i]);
-  }
+  // DEBUG
+  printf("%s\n", context_.DumpContents().c_str());
 
   const Instruction *bytecode = reinterpret_cast<const Instruction *>(&context_.bytecode_[0]);
   const Instruction *ip = bytecode;
@@ -72,7 +66,7 @@ __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction
 
 #ifndef NDEBUG
 #define DEBUG_CODE_PRE \
-  printf("%s\n", context_.Dump(ip).c_str())
+  LOG_TRACE("%s", context_.Dump(ip).c_str())
 #else
 #define DEBUG_CODE_PRE
 #endif
@@ -105,10 +99,18 @@ type_t QueryInterpreter::GetReturnValue() {
   return GetValue<type_t>(0);
 }
 
-void QueryInterpreter::InitializeActivationRecord() {
+void QueryInterpreter::InitializeActivationRecord(std::vector<value_t> &arguments) {
   values_.resize(context_.number_values_);
-  for (const auto &constant : context_.constants_) {
+  for (auto &constant : context_.constants_) {
     SetValue<value_t>(constant.second, constant.first);
+  }
+
+  if (context_.function_arguments_.size() != arguments.size()) {
+    throw Exception("llvm function called through interpreter with wrong number of arguments");
+  }
+
+  for (unsigned int i = 0; i < context_.function_arguments_.size(); i++) {
+    SetValue<value_t>(context_.function_arguments_[i], arguments[i]);
   }
 
   call_activations_.resize(context_.external_call_contexts_.size());

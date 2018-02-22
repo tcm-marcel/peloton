@@ -192,12 +192,9 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   }
 
   // Create Bytecode
-  interpreter::ContextBuilder init_builder(code_context_, query_funcs_.init_func);
-  interpreter::InterpreterContext init_bytecode = init_builder.CreateInterpreterContext();
-  interpreter::ContextBuilder plan_builder(code_context_, query_funcs_.plan_func);
-  interpreter::InterpreterContext plan_bytecode = plan_builder.CreateInterpreterContext();
-  interpreter::ContextBuilder tear_down_builder(code_context_, query_funcs_.tear_down_func);
-  interpreter::InterpreterContext tear_down_bytecode = tear_down_builder.CreateInterpreterContext();
+  interpreter::InterpreterContext init_bytecode = interpreter::ContextBuilder::CreateInterpreterContext(code_context_, query_funcs_.init_func);
+  interpreter::InterpreterContext plan_bytecode = interpreter::ContextBuilder::CreateInterpreterContext(code_context_, query_funcs_.plan_func);
+  interpreter::InterpreterContext tear_down_bytecode = interpreter::ContextBuilder::CreateInterpreterContext(code_context_, query_funcs_.tear_down_func);
 
   // Time initialization
   if (stats != nullptr) {

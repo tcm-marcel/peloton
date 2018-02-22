@@ -81,7 +81,8 @@ CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, xor)
 HANDLE_INST(extractvalue)
 CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, load)
 CREATE_FOR_ALL_TYPES(HANDLE_TYPED_INST, store)
-CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, alloca)
+CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, alloca_array)
+HANDLE_INST(alloca)
 
 CREATE_FOR_ALL_TYPES(HANDLE_TYPED_INST, cmp_eq)  // compare for unsigned integer and floating point
 CREATE_FOR_ALL_TYPES(HANDLE_TYPED_INST, cmp_ne)  // compare for unsigned integer and floating point

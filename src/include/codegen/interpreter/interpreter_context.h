@@ -120,11 +120,10 @@ class InterpreterContext {
 
  private:
   size_t number_values_;
-  std::unordered_map<value_t, index_t> constants_;
+  std::vector<std::pair<value_t, index_t> > constants_;
+  std::vector<index_t> function_arguments_;
   std::vector<instr_slot_t> bytecode_;
   std::vector<ExternalCallContext> external_call_contexts_;
-
-  size_t number_arguments_;
 
   std::vector<InterpreterContext> sub_contexts_;
 
