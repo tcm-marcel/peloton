@@ -36,13 +36,28 @@ InterpreterContext ContextBuilder::CreateInterpreterContext(CodeContext &code_co
 #endif
 
   builder.AnalyseFunction();
-  //builder.PerformNaiveRegisterAllocation();
-  builder.PerformGreedyRegisterAllocation();
+  builder.PerformNaiveRegisterAllocation();
+  //builder.PerformGreedyRegisterAllocation();
 
+  printf("Mapping:\n");
   for (unsigned int i = 0; i < builder.value_slots_.size(); i++) {
-    if (builder.value_liveness_[i].last_usage < valueLivenessUnknown)
-      printf("%u;%u;%u\n", builder.value_slots_[i], builder.value_liveness_[i].definition, builder.value_liveness_[i].last_usage);
+    if (builder.value_liveness_[i].last_usage < valueLivenessUnknown) {
+      printf("%u;%u;%u\n",
+               builder.value_slots_[i],
+               builder.value_liveness_[i].definition,
+               builder.value_liveness_[i].last_usage);
+
+      /*
+      for (auto &mapping : builder.value_mapping_) {
+        if (mapping.second == i) {
+          printf("%s\n", CodeGen::Print(mapping.first).c_str());
+        }
+      }
+       */
+
+    }
   }
+  printf("--\n");
 
   builder.TranslateFunction();
   builder.Finalize();
@@ -129,6 +144,7 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(UNUSED_ATTRIBUTE llvm::In
                                                        index_t arg4,
                                                        index_t arg5,
                                                        index_t arg6) {
+  PL_ASSERT(opcode != Opcode::undefined);
   PL_ASSERT(number_instruction_slots > 1 || (arg3 == 0 && arg4 == 0 && arg5 == 0 && arg6 == 0));
 
   instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots, 0);
@@ -154,6 +170,7 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(llvm::Instruction *llvm_i
                                                        llvm::Value *arg0,
                                                        llvm::Value *arg1,
                                                        llvm::Value *arg2) {
+  PL_ASSERT(opcode != Opcode::undefined);
   return InsertBytecodeInstruction(llvm_instruction, opcode, GetValueSlot(arg0), GetValueSlot(arg1), GetValueSlot(arg2));
 }
 
@@ -161,6 +178,7 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(llvm::Instruction *llvm_i
                                                        Opcode opcode,
                                                        llvm::Value *arg0,
                                                        llvm::Value *arg1) {
+  PL_ASSERT(opcode != Opcode::undefined);
   return InsertBytecodeInstruction(llvm_instruction, opcode, GetValueSlot(arg0), GetValueSlot(arg1));
 }
 
@@ -299,11 +317,11 @@ ContextBuilder::value_index_t ContextBuilder::AddConstant(
 
 index_t ContextBuilder::GetValueSlot(value_index_t value_index) const {
   PL_ASSERT(value_index < value_slots_.size());
-  return value_slots_[value_index] + 1;
+  return value_slots_[value_index];
 }
 
 index_t ContextBuilder::GetValueSlot(llvm::Value *value) const {
-  return value_slots_[GetValueIndex(value)] + 1;
+  return value_slots_[GetValueIndex(value)];
 }
 
 void ContextBuilder::AddValueDefinition(value_index_t value_index,
@@ -325,7 +343,7 @@ index_t ContextBuilder::GetTemporaryValueSlot(llvm::BasicBlock *bb) {
   number_temporary_values_[bb]++;
 
   number_temporary_value_slots_ = std::max(number_temporary_value_slots_, static_cast<size_t>(number_temporary_values_[bb]));
-  return number_value_slots_ + number_temporary_values_[bb];
+  return number_value_slots_ + number_temporary_values_[bb] - 1;
 }
 
 ffi_type *ContextBuilder::GetFFIType(llvm::Type *type) {
@@ -447,9 +465,13 @@ void ContextBuilder::AnalyseFunction() {
       }
 
       // DEF: save the instruction index as the liveness starting point
+
+      // for some instructions we know in advance that they will produce a nop,
+      // so we merge their value and their operand here
       if (instruction->getOpcode() == llvm::Instruction::BitCast ||
           instruction->getOpcode() == llvm::Instruction::Trunc ||
-          instruction->getOpcode() == llvm::Instruction::PtrToInt) {
+          instruction->getOpcode() == llvm::Instruction::PtrToInt ||
+          (instruction->getOpcode() == llvm::Instruction::GetElementPtr && llvm::dyn_cast<llvm::GetElementPtrInst>(instruction)->hasAllZeroIndices())) {
         // merge operand resulting value
         CreateValueAlias(instruction,
                          GetValueIndex(instruction->getOperand(0)));
@@ -494,7 +516,7 @@ void ContextBuilder::AnalyseFunction() {
 
 void ContextBuilder::PerformNaiveRegisterAllocation() {
   // assign a value slot to every liveness range in value_liveness_
-  value_slots_.resize(value_liveness_.size());
+  value_slots_.resize(value_liveness_.size(), 0);
 
   // it is not worth removing entries from values that are never used,
   // so we simply skip them when iterating (if .last_usage = unknown)
@@ -508,16 +530,16 @@ void ContextBuilder::PerformNaiveRegisterAllocation() {
     if (value_liveness_[i].last_usage == valueLivenessUnknown)
       continue;
 
-    value_slots_[i] = reg++;
+    value_slots_[i] = reg++ + 1; // + 1 because 0 is dummy slot
   }
 
-  number_value_slots_ = reg;
+  number_value_slots_ = reg + 1;
 }
 
 void ContextBuilder::PerformGreedyRegisterAllocation() {
   // assign a value slot to every liveness range in value_liveness_
 
-  value_slots_.resize(value_liveness_.size());
+  value_slots_.resize(value_liveness_.size(), 0);
   std::vector<ValueLiveness> registers;
 
   auto findEmptyRegister = [&registers](ValueLiveness liveness) {
@@ -545,7 +567,7 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
   for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
     if (value_liveness_[i].definition == 0 && value_liveness_[i].last_usage != valueLivenessUnknown) {
       registers.push_back(value_liveness_[i]);
-      value_slots_[i] = registers.size() - 1;
+      value_slots_[i] = registers.size() - 1 + 1; // + 1 because 0 is dummy slot
     }
   }
 
@@ -564,10 +586,10 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
     instruction_index = value_liveness_[i].definition;
 #endif
 
-    value_slots_[i] = findEmptyRegister(value_liveness_[i]);
+    value_slots_[i] = findEmptyRegister(value_liveness_[i]) + 1; // + 1 because 0 is dummy slot
   }
 
-  number_value_slots_ = registers.size();
+  number_value_slots_ = registers.size() + 1; // + 1 because 0 is dummy slot
 }
 
 void ContextBuilder::TranslateFunction() {
@@ -584,7 +606,7 @@ void ContextBuilder::TranslateFunction() {
     for (llvm::BasicBlock::iterator instr_iterator = bb->begin(); instr_iterator != bb->end(); ++instr_iterator) {
       llvm::Instruction *instruction = instr_iterator;
 
-      LOG_TRACE("Interpreter translating: %s\n", CodeGen::Print(instruction).c_str());
+      LOG_DEBUG("Interpreter translating: %s\n", CodeGen::Print(instruction).c_str());
 
       switch (instruction->getOpcode()) {
         // Terminators
@@ -641,8 +663,7 @@ void ContextBuilder::TranslateFunction() {
           // Cast instructions
         case llvm::Instruction::BitCast:
           // bit casts translate to nop
-          // values got already merged in liveness pass
-          //InsertBytecodeInstruction(instruction, Opcode::nop_mov, instruction, instruction->getOperand(0));
+          // values got already merged in analysis pass
           break;
 
         case llvm::Instruction::SExt:
@@ -654,8 +675,7 @@ void ContextBuilder::TranslateFunction() {
         case llvm::Instruction::Trunc:
         case llvm::Instruction::PtrToInt:
           // trunc translates to nop
-          // values got already merged in liveness pass
-          //InsertBytecodeInstruction(instruction, Opcode::nop_mov, instruction, instruction->getOperand(0));
+          // values got already merged in analysis pass
           break;
 
         case llvm::Instruction::UIToFP:
@@ -663,6 +683,7 @@ void ContextBuilder::TranslateFunction() {
         case llvm::Instruction::FPToUI:
         case llvm::Instruction::FPToSI:
           TranslateFloatIntCast(instruction);
+          break;
 
           // Other instructions
         case llvm::Instruction::ICmp:
@@ -704,8 +725,8 @@ void ContextBuilder::TranslateFunction() {
 }
 
 void ContextBuilder::Finalize() {
-  // calculate final number of value slots during runtime (+1 for dummy slot zero)
-  context_.number_values_ = number_value_slots_ + number_temporary_value_slots_ + 1;
+  // calculate final number of value slots during runtime
+  context_.number_values_ = number_value_slots_ + number_temporary_value_slots_;
 
   // check if number values exceeds bit range (unrealistic)
   if (context_.number_values_ >= std::numeric_limits<index_t>::max()) {
@@ -959,6 +980,11 @@ void ContextBuilder::TranslateGetElementPtr(llvm::Instruction *instruction) {
   auto *gep_instruction = llvm::cast<llvm::GetElementPtrInst>(&*instruction);
   int64_t overall_offset = 0;
 
+  // If the GEP translates to a nop, the values have been already merged
+  // during the analysis pass
+  if (gep_instruction->hasAllZeroIndices())
+    return;
+
   // offset is an immediate constant, not a slot index
   // instruction is created here, but offset will be filled in later
   auto &gep_offset_bytecode_instruction = InsertBytecodeInstruction(
@@ -1043,13 +1069,6 @@ void ContextBuilder::TranslateGetElementPtr(llvm::Instruction *instruction) {
   // assure that resulting type is correct
   PL_ASSERT(type == gep_instruction->getResultElementType());
 
-  // TODO: check if gep can be left out
-  if ((reinterpret_cast<instr_slot_t *>(&gep_offset_bytecode_instruction) == &context_.bytecode_.back()) && overall_offset == 0) {
-    // TODO: create alias!
-    printf("found zero gep: %s\n", CodeGen::Print(instruction).c_str());
-    printf("hasAllZeroIndices(): %u\n", gep_instruction->hasAllZeroIndices());
-  }
-
   // fill in calculated overall offset in previously placed gep_offset
   // bytecode instruction
   gep_offset_bytecode_instruction.args[2] = static_cast<index_t>(overall_offset);
@@ -1061,26 +1080,38 @@ void ContextBuilder::TranslateFloatIntCast(llvm::Instruction *instruction) {
 
   Opcode opcode = Opcode::undefined;
 
-  if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletosi), cast_instruction->getType());
+  if (instruction->getOpcode() == llvm::Instruction::FPToSI) {
+    if (cast_instruction->getOperand(0)->getType() == code_context_.float_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::floattosi), cast_instruction->getType());
+    else if (cast_instruction->getOperand(0)->getType() == code_context_.double_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletosi), cast_instruction->getType());
+    else
+      throw NotSupportedException("unsupported cast instruction");
 
-    if (cast_instruction->getOperand(0)->getType() != code_context_.double_type_)
-      throw NotSupportedException("only double casts supported");
+  } else if (instruction->getOpcode() == llvm::Instruction::FPToUI) {
+    if (cast_instruction->getOperand(0)->getType() == code_context_.float_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::floattoui), cast_instruction->getType());
+    else if (cast_instruction->getOperand(0)->getType() == code_context_.double_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletoui), cast_instruction->getType());
+    else
+      throw NotSupportedException("unsupported cast instruction");
+
   } else if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletoui), cast_instruction->getType());
+    if (cast_instruction->getType() == code_context_.float_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sitofloat), cast_instruction->getOperand(0)->getType());
+    else if (cast_instruction->getType() == code_context_.double_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sitodouble), cast_instruction->getOperand(0)->getType());
+    else
+      throw NotSupportedException("unsupported cast instruction");
 
-    if (cast_instruction->getOperand(0)->getType() != code_context_.double_type_)
-      throw NotSupportedException("only double casts supported");
-  } else if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sitodouble), cast_instruction->getOperand(0)->getType());
+  } else if (instruction->getOpcode() == llvm::Instruction::UIToFP) {
+    if (cast_instruction->getType() == code_context_.float_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::uitofloat), cast_instruction->getOperand(0)->getType());
+    else if (cast_instruction->getType() == code_context_.double_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::uitodouble), cast_instruction->getOperand(0)->getType());
+    else
+      throw NotSupportedException("unsupported cast instruction");
 
-    if (cast_instruction->getType() != code_context_.double_type_)
-      throw NotSupportedException("only double casts supported");
-  } else if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::uitodouble), cast_instruction->getOperand(0)->getType());
-
-    if (cast_instruction->getType() != code_context_.double_type_)
-      throw NotSupportedException("only double casts supported");
   } else {
     throw NotSupportedException("unsupported cast instruction");
   }
@@ -1158,31 +1189,31 @@ void ContextBuilder::TranslateCmp(llvm::Instruction *instruction) {
     case llvm::CmpInst::Predicate::ICMP_NE:
     case llvm::CmpInst::Predicate::FCMP_ONE:
     case llvm::CmpInst::Predicate::FCMP_UNE:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_ne), type);
+      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_ne), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_UGT:
     case llvm::CmpInst::Predicate::FCMP_OGT:
     case llvm::CmpInst::Predicate::FCMP_UGT:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_gt), type);
+      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_gt), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_UGE:
     case llvm::CmpInst::Predicate::FCMP_OGE:
     case llvm::CmpInst::Predicate::FCMP_UGE:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_ge), type);
+      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_ge), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_ULT:
     case llvm::CmpInst::Predicate::FCMP_OLT:
     case llvm::CmpInst::Predicate::FCMP_ULT:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_lt), type);
+      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_lt), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_ULE:
     case llvm::CmpInst::Predicate::FCMP_OLE:
     case llvm::CmpInst::Predicate::FCMP_ULE:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_le), type);
+      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_le), type);
       break;
 
 

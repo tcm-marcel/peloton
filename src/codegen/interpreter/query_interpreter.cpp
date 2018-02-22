@@ -49,10 +49,8 @@ __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction
 
   }
 
+  printf("running interpreter:\n");
   InitializeActivationRecord(arguments);
-
-  // DEBUG
-  printf("%s\n", context_.DumpContents().c_str());
 
   const Instruction *bytecode = reinterpret_cast<const Instruction *>(&context_.bytecode_[0]);
   const Instruction *ip = bytecode;
@@ -66,7 +64,7 @@ __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction
 
 #ifndef NDEBUG
 #define DEBUG_CODE_PRE \
-  LOG_TRACE("%s", context_.Dump(ip).c_str())
+  //LOG_DEBUG("%s", context_.Dump(ip).c_str())
 #else
 #define DEBUG_CODE_PRE
 #endif

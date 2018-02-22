@@ -161,11 +161,12 @@ class ContextBuilder {
 
   /**
    * Overall number of value slots needed (from register allocation)
+   * without temporary value slots (added during translation)
    */
   size_t number_value_slots_;
 
   /**
-   * Holds all constants as values and their value index
+   * Holds all constants, their actual values and their value index
    */
   std::vector<std::pair<value_t, value_index_t>> constants_;
 

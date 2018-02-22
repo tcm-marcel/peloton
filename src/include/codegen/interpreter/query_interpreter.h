@@ -66,7 +66,7 @@ class QueryInterpreter {
 #ifdef LOG_TRACE_ENABLED
     std::ostringstream output;
     output << "  [" << std::dec << std::setw(3) << index << "] <= " << value << "/0x" << std::hex << value;
-    LOG_TRACE("%s", output.str().c_str());
+    LOG_DEBUG("%s", output.str().c_str());
 #endif
   }
 
@@ -375,39 +375,6 @@ class QueryInterpreter {
     return AdvanceIP<1>(instruction);
   }
 
-
-
-/*
-  template <typename type_t>
-  ALWAYS_INLINE inline const Instruction *doubletosiHandler(const Instruction *instruction) {
-    static_assert(std::is_integral<type_t>::value, "__func__ must only be used with integer types");
-    using type_signed_t = typename std::make_signed<type_t>::type;
-    SetValue<type_signed_t>(instruction->args[0], (static_cast<type_signed_t>(GetValue<double>(instruction->args[1]))));
-    return AdvanceIP<1>(instruction);
-  }
-
-  template <typename type_t>
-  ALWAYS_INLINE inline const Instruction *doubletouiHandler(const Instruction *instruction) {
-    static_assert(std::is_integral<type_t>::value, "__func__ must only be used with integer types");
-    SetValue<type_t>(instruction->args[0], (static_cast<type_t>(GetValue<double>(instruction->args[1]))));
-    return AdvanceIP<1>(instruction);
-  }
-
-  template <typename type_t>
-  ALWAYS_INLINE inline const Instruction *sitodoubleHandler(const Instruction *instruction) {
-    static_assert(std::is_integral<type_t>::value, "__func__ must only be used with integer types");
-    using type_signed_t = typename std::make_signed<type_t>::type;
-    SetValue<double>(instruction->args[0], (static_cast<double>(GetValue<type_signed_t>(instruction->args[1]))));
-    return AdvanceIP<1>(instruction);
-  }
-
-  template <typename type_t>
-  ALWAYS_INLINE inline const Instruction *uitodoubleHandler(const Instruction *instruction) {
-    static_assert(std::is_integral<type_t>::value, "__func__ must only be used with integer types");
-    SetValue<double>(instruction->args[0], (static_cast<double>(GetValue<type_t>(instruction->args[1]))));
-    return AdvanceIP<1>(instruction);
-  }
-*/
 
   // The FP<>Int casts are created in a two-level hierarchy
   // eg. the generated call to floattosiHandler<i8> is redirected to tosiHandler<float, i8>
