@@ -36,8 +36,8 @@ InterpreterContext ContextBuilder::CreateInterpreterContext(CodeContext &code_co
 #endif
 
   builder.AnalyseFunction();
-  builder.PerformNaiveRegisterAllocation();
-  //builder.PerformGreedyRegisterAllocation();
+  //builder.PerformNaiveRegisterAllocation();
+  builder.PerformGreedyRegisterAllocation();
 
   for (unsigned int i = 0; i < builder.value_slots_.size(); i++) {
     if (builder.value_liveness_[i].last_usage < valueLivenessUnknown)
