@@ -36,15 +36,15 @@ class QueryInterpreter {
   explicit QueryInterpreter(const InterpreterContext &context);
 
   void ExecuteFunction(char *param);
-  void ExecuteFunction(std::vector<value_t> arguments);
+  void ExecuteFunction(const std::vector<value_t> &arguments);
 
-  static value_t ExecuteFunction(const InterpreterContext &context, const std::vector<value_t> arguments);
+  static value_t ExecuteFunction(const InterpreterContext &context, const std::vector<value_t> &arguments);
 
   template <typename type_t>
   type_t GetReturnValue();
 
  private:
-  void InitializeActivationRecord(std::vector<value_t> &arguments);
+  void InitializeActivationRecord(const std::vector<value_t> &arguments);
 
   template <typename type_t>
   ALWAYS_INLINE inline type_t GetValue(const index_t index) {
@@ -525,7 +525,7 @@ class QueryInterpreter {
       arguments[i] = GetValue<value_t>(call_instruction->args[i]);
     }
 
-    value_t result = ExecuteFunction(context_.sub_contexts_[call_instruction->interpreter_context], arguments);
+    value_t result = ExecuteFunction(context_.sub_contexts_[call_instruction->sub_context], arguments);
     SetValue(call_instruction->dest_slot, result);
 
     return AdvanceIP(instruction, context_.GetInteralCallInstructionSlotSize(call_instruction));

@@ -113,7 +113,26 @@ std::string InterpreterContext::Dump(const Instruction *instruction) const {
       break;
 #endif
 
-      //TODO: add other instructions (larger ones)
+#ifndef NDEBUG
+#define HANDLE_INTERNAL_CALL_INST(opcode) \
+    case Opcode::opcode: \
+      output << "[" << std::setw(3) << reinterpret_cast<const InternalCallInstruction *>(instruction)->dest_slot << "] "; \
+      for (size_t i = 0; i < reinterpret_cast<const InternalCallInstruction *>(instruction)->number_args; i++) { \
+        output << "[" << std::setw(3) << reinterpret_cast<const InternalCallInstruction *>(instruction)->args[i] << "] "; \
+      } \
+      output << "(" << static_cast<const llvm::CallInst *>(instruction_trace_[GetIndexFromIP(instruction)])->getCalledFunction()->getName().str() << ") "; \
+      break;
+#else
+#define HANDLE_INTERNAL_CALL_INST(opcode) \
+    case Opcode::opcode: \
+      output << "[" << std::setw(3) << reinterpret_cast<const InternalCallInstruction *>(instruction)->dest_slot << "] "; \
+      for (size_t i = 0; i < reinterpret_cast<const InternalCallInstruction *>(instruction)->number_args; i++) { \
+        output << "[" << std::setw(3) << reinterpret_cast<const InternalCallInstruction *>(instruction)->args[i] << "] "; \
+      } \
+      break;
+#endif
+
+      //TODO: add other instructions (overflow intrinsics, internal call)
 
 #include "codegen/interpreter/bytecode_instructions.def"
 

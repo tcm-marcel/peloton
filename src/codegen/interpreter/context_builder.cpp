@@ -13,13 +13,9 @@
 
 #include "codegen/interpreter/context_builder.h"
 #include "codegen/codegen.h"
-#include "codegen/code_context.h"
+#include "include/common/exception.h"
 
-#include <limits>
-#include <include/common/exception.h>
 #include <llvm/IR/InstIterator.h>
-#include <include/codegen/interpreter/interpreter_context.h>
-#include <include/codegen/interpreter/context_builder.h>
 
 namespace peloton {
 namespace codegen {
@@ -190,7 +186,7 @@ ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
     UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
     index_t call_context,
     void *function) {
-  const size_t number_slots = std::ceil<size_t>(sizeof(ExternalCallInstruction) / sizeof(instr_slot_t));
+  const size_t number_slots = (sizeof(ExternalCallInstruction) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
   PL_ASSERT(number_slots == 2);
 
   instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
@@ -207,23 +203,25 @@ ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
 }
 
 InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
-                                                                   index_t interpreter_context,
+                                                                   index_t sub_context,
                                                                    index_t dest_slot,
                                                                    size_t number_arguments) {
-  const size_t number_slots = std::ceil<size_t>((3 + number_arguments) / sizeof(instr_slot_t));
+  const size_t number_slots = ((2 * (4 + number_arguments)) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
 
   instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
   InternalCallInstruction& instruction = *reinterpret_cast<InternalCallInstruction *>(&slot);
   instruction.op = Opcode::call_internal;
-  instruction.interpreter_context = interpreter_context;
+  instruction.sub_context = sub_context;
   instruction.dest_slot = dest_slot;
   instruction.number_args = static_cast<index_t>(number_arguments);
+
+  PL_ASSERT(&instruction.args[number_arguments - 1] < reinterpret_cast<index_t *>(&context_.bytecode_.back() + 1));
 
 #ifndef NDEBUG
   context_.instruction_trace_.insert(context_.instruction_trace_.end(), number_slots, llvm_instruction);
 #endif
 
-  return reinterpret_cast<InternalCallInstruction &>(context_.bytecode_[context_.bytecode_.size() - number_slots]);
+  return reinterpret_cast<InternalCallInstruction &>(slot);
 }
 
 ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(const llvm::Value *alias, value_index_t value_index) {
@@ -1365,22 +1363,22 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
     if (!instruction->getType()->isVoidTy())
       dest_slot = GetValueSlot(call_instruction);
 
-    index_t interpreter_context_index;
+    index_t sub_context_index;
     const auto result = sub_context_mapping_.find(function);
     if (result != sub_context_mapping_.end()) {
-      interpreter_context_index = result->second;
+      sub_context_index = result->second;
     } else {
       auto sub_context = ContextBuilder::CreateInterpreterContext(code_context_, function);
 
       context_.sub_contexts_.push_back(std::move(sub_context));
-      interpreter_context_index = context_.sub_contexts_.size() - 1;
-      sub_context_mapping_[function] = interpreter_context_index;
+      sub_context_index = context_.sub_contexts_.size() - 1;
+      sub_context_mapping_[function] = sub_context_index;
     }
 
-    InternalCallInstruction &instruction = InsertBytecodeInternalCallInstruction(call_instruction, interpreter_context_index, dest_slot, call_instruction->getNumArgOperands());
+    InternalCallInstruction &bytecode_instruction = InsertBytecodeInternalCallInstruction(call_instruction, sub_context_index, dest_slot, call_instruction->getNumArgOperands());
 
     for (unsigned int i = 0; i < call_instruction->getNumArgOperands(); i++) {
-      instruction.args[i] = GetValueSlot(call_instruction->getArgOperand(i));
+      bytecode_instruction.args[i] = GetValueSlot(call_instruction->getArgOperand(i));
 
       if (code_context_.GetTypeSize(call_instruction->getArgOperand(i)->getType()) > 8) {
         throw NotSupportedException("argument for internal call too big");

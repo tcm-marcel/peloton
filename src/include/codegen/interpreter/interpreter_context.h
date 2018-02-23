@@ -61,7 +61,7 @@ typedef struct {
 
 typedef struct {
   Opcode op;
-  index_t interpreter_context;
+  index_t sub_context;
   index_t dest_slot;
   index_t number_args;
   index_t args[];
@@ -81,7 +81,7 @@ typedef struct {
 } ExternalCallContext;
 
 /**
- * A InterpreterContext contains all information necessary to run a LLVM function in the interpreter and is completely independent from the CodeContext it was created from. It can be moved and copied.
+ * A InterpreterContext contains all information necessary to run a LLVM function in the interpreter and is completely independent from the CodeContext it was created from (except for the tracing information in debug mode). It can be moved and copied.
  */
 class InterpreterContext {
  public:
@@ -137,16 +137,17 @@ class InterpreterContext {
     return index;
   }
 
-  // TODO
   /**
-   * Returns the number of slots a given instruction occupies
-   * @param instruction
-   * @return
+   * Returns the number of slots a given instruction occupies in the bytecode stream
+   * @param instruction pointer to the instruction inside the bytecode
+   * @return number of slots (each 8 Byte) that are used by this instruction
    */
   static size_t GetInstructionSlotSize(const Instruction *instruction);
 
   static ALWAYS_INLINE inline size_t GetInteralCallInstructionSlotSize(const InternalCallInstruction *instruction) {
-    return std::ceil<size_t>((4 + instruction->number_args) / sizeof(instr_slot_t));
+    const size_t number_slots = ((2 * (4 + instruction->number_args)) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
+    PL_ASSERT(number_slots > 0);
+    return number_slots;
   }
 
   std::string DumpContents() const;

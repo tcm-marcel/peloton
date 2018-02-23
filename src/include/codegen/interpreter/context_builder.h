@@ -122,7 +122,7 @@ class ContextBuilder {
                                                                  index_t call_context,
                                                                  void *function);
   InternalCallInstruction &InsertBytecodeInternalCallInstruction(const llvm::Instruction *llvm_instruction,
-                                                                 index_t interpreter_context,
+                                                                 index_t sub_context,
                                                                  index_t dest_slot,
                                                                  size_t number_arguments);
 

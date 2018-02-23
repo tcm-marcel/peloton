@@ -29,7 +29,7 @@ void *QueryInterpreter::label_pointers_[InterpreterContext::GetNumberOpcodes()] 
 QueryInterpreter::QueryInterpreter(const InterpreterContext &context)
     : context_(context) {}
 
-value_t QueryInterpreter::ExecuteFunction(const InterpreterContext &context, const std::vector<value_t> arguments) {
+value_t QueryInterpreter::ExecuteFunction(const InterpreterContext &context, const std::vector<value_t> &arguments) {
   QueryInterpreter interpreter(context);
   interpreter.ExecuteFunction(arguments);
 
@@ -40,7 +40,7 @@ void QueryInterpreter::ExecuteFunction(char *param) {
   ExecuteFunction({reinterpret_cast<value_t &>(param)});
 }
 
-__attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction(std::vector<value_t> arguments) {
+__attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
   if (label_pointers_[0] == nullptr) {
 
 #define HANDLE_INST(op) label_pointers_[InterpreterContext::GetOpcodeId(Opcode::op)] = &&_ ## op;
@@ -97,7 +97,7 @@ type_t QueryInterpreter::GetReturnValue() {
   return GetValue<type_t>(0);
 }
 
-void QueryInterpreter::InitializeActivationRecord(std::vector<value_t> &arguments) {
+void QueryInterpreter::InitializeActivationRecord(const std::vector<value_t> &arguments) {
   values_.resize(context_.number_values_);
   for (auto &constant : context_.constants_) {
     SetValue<value_t>(constant.second, constant.first);
