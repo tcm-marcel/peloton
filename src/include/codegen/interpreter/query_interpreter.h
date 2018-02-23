@@ -651,8 +651,8 @@ class QueryInterpreter {
 
  private:
 #ifndef NDEBUG
-  llvm::Instruction *GetIRInstructionFromIP(const Instruction *ip);
-  llvm::Instruction *GetIRInstructionFromIP(index_t instr_slot);
+  const llvm::Instruction *GetIRInstructionFromIP(const Instruction *ip);
+  const llvm::Instruction *GetIRInstructionFromIP(index_t instr_slot);
 #endif
 
  private:

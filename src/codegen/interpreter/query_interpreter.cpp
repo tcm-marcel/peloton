@@ -141,12 +141,12 @@ uintptr_t QueryInterpreter::AllocateMemory(size_t number_bytes) {
 
 
 #ifndef NDEBUG
-llvm::Instruction *QueryInterpreter::GetIRInstructionFromIP(const Instruction *ip) {
+const llvm::Instruction *QueryInterpreter::GetIRInstructionFromIP(const Instruction *ip) {
   index_t index = context_.GetIndexFromIP(ip);
   return GetIRInstructionFromIP(static_cast<index_t>(index));
 }
 
-llvm::Instruction *QueryInterpreter::GetIRInstructionFromIP(index_t instr_slot) {
+const llvm::Instruction *QueryInterpreter::GetIRInstructionFromIP(index_t instr_slot) {
   return context_.instruction_trace_.at(instr_slot);
 }
 #endif

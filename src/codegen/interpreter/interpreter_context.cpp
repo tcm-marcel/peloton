@@ -101,7 +101,7 @@ std::string InterpreterContext::Dump(const Instruction *instruction) const {
       for (auto arg : external_call_contexts_[instruction->args[0]].args) { \
         output << "[" << std::setw(3) << arg << "] "; \
       } \
-      output << "(" << static_cast<llvm::CallInst *>(instruction_trace_[GetIndexFromIP(instruction)])->getCalledFunction()->getName().str() << ") "; \
+      output << "(" << static_cast<const llvm::CallInst *>(instruction_trace_[GetIndexFromIP(instruction)])->getCalledFunction()->getName().str() << ") "; \
       break;
 #else
 #define HANDLE_CALL_INST(opcode) \
@@ -123,7 +123,7 @@ std::string InterpreterContext::Dump(const Instruction *instruction) const {
   }
 
 #ifndef NDEBUG
-  output << "(" << CodeGen::Print(static_cast<llvm::Value *>(instruction_trace_[GetIndexFromIP(instruction)])) << ")";
+  output << "(" << CodeGen::Print(static_cast<const llvm::Value *>(instruction_trace_[GetIndexFromIP(instruction)])) << ")";
 #endif
 
   return output.str();

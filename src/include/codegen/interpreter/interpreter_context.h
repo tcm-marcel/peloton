@@ -80,32 +80,69 @@ typedef struct {
   std::vector<ffi_type *> arg_types;
 } ExternalCallContext;
 
-
+/**
+ * A InterpreterContext contains all information necessary to run a LLVM function in the interpreter and is completely independent from the CodeContext it was created from. It can be moved and copied.
+ */
 class InterpreterContext {
  public:
+  /**
+   * Returns the Opcode enum for a given Opcode Id (to avoid plain casting)
+   * @param id Opcode Id
+   * @return Opcode enum
+   */
   ALWAYS_INLINE inline static constexpr Opcode GetOpcodeFromId(index_t id) {
     return static_cast<Opcode>(id);
   }
 
+  /**
+   * Returns the Opcode Id to a given Opcode enum (to avoid plain casting)
+   * @param opcode Opcode enum
+   * @return Opcode Id
+   */
   ALWAYS_INLINE inline static constexpr index_t GetOpcodeId(Opcode opcode) {
     return static_cast<index_t>(opcode);
   }
 
+  /**
+   * Returns a numan readable string to a given Opcode
+   * @param opcode Opcode enum
+   * @return String representation if the Opcode
+   */
   static const char *GetOpcodeString(Opcode opcode);
 
+  /**
+   * Returns the overall number of existing Opcodes (not trivial, as the Opcodes are created with expanding macros)
+   * @return overall number of existing Opcodes
+   */
   inline static constexpr size_t GetNumberOpcodes() {
     return static_cast<index_t>(Opcode::NUMBER_OPCODES);
   }
 
+  /**
+   * Return the instruction pointer to a given instruction index (from this context)
+   * @param index instruction index
+   * @return pointer to the instruction at that index inside the bytecode
+   */
   ALWAYS_INLINE inline const Instruction *GetIPFromIndex(index_t index) const {
     return reinterpret_cast<const Instruction *>(const_cast<instr_slot_t *>(bytecode_.data()) + index);
   }
 
+  /**
+   * Returns the instruction index for a given instruction pointer (from this context)
+   * @param instruction pointer to a given instruction inside the bytecode
+   * @return index to the instruction the pointer is pointing to
+   */
   ALWAYS_INLINE inline index_t GetIndexFromIP(const Instruction* instruction) const {
     index_t index = reinterpret_cast<const instr_slot_t *>(instruction) - bytecode_.data();
     return index;
   }
 
+  // TODO
+  /**
+   * Returns the number of slots a given instruction occupies
+   * @param instruction
+   * @return
+   */
   static size_t GetInstructionSlotSize(const Instruction *instruction);
 
   static ALWAYS_INLINE inline size_t GetInteralCallInstructionSlotSize(const InternalCallInstruction *instruction) {
@@ -128,16 +165,12 @@ class InterpreterContext {
   std::vector<InterpreterContext> sub_contexts_;
 
   #ifndef NDEBUG
-  std::vector<llvm::Instruction *> instruction_trace_;
+  std::vector<const llvm::Instruction *> instruction_trace_;
   #endif
 
  private:
   friend QueryInterpreter;
   friend ContextBuilder;
-
-  // TODO(marcel) check non move/copy
-  // This class cannot be copy or move-constructed
-  //DISALLOW_COPY(InterpreterContext);
 };
 
 }  // namespace interpreter
