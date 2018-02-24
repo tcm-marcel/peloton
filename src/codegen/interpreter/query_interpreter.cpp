@@ -36,8 +36,9 @@ value_t QueryInterpreter::ExecuteFunction(const InterpreterContext &context, con
   return interpreter.GetReturnValue<value_t>();
 }
 
-void QueryInterpreter::ExecuteFunction(char *param) {
-  ExecuteFunction({reinterpret_cast<value_t &>(param)});
+void QueryInterpreter::ExecuteFunction(const InterpreterContext &context, char *param) {
+  QueryInterpreter interpreter(context);
+  interpreter.ExecuteFunction({reinterpret_cast<value_t &>(param)});
 }
 
 __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {

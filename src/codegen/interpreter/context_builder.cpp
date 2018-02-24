@@ -26,14 +26,16 @@ ContextBuilder::ContextBuilder(const CodeContext &code_context, const llvm::Func
 InterpreterContext ContextBuilder::CreateInterpreterContext(const CodeContext &code_context, const llvm::Function *function) {
   ContextBuilder builder(code_context, function);
 
+#ifndef NDEBUG
+  code_context.DumpContents();
+#endif
+
   builder.AnalyseFunction();
   builder.PerformNaiveRegisterAllocation();
   //builder.PerformGreedyRegisterAllocation();
 
 #ifndef NDEBUG
   // DEBUG
-  code_context.DumpContents();
-
   printf("IR:\n");
   for (unsigned i = 0; i < builder.bb_reverse_post_order_.size(); i++) {
     printf("%u:%s", i, CodeGen::Print(builder.bb_reverse_post_order_[i]).c_str());
@@ -437,10 +439,15 @@ void ContextBuilder::AnalyseFunction() {
         llvm::Value *operand = op_iterator->get();
 
         if (IsConstantValue(operand)) {
-          // exception: the called function in a CallInst is also a constant
+          // exception 1: the called function in a CallInst is also a constant
           // but we want to skip this one
           auto *call_instruction = llvm::dyn_cast<llvm::CallInst>(instruction);
           if (call_instruction != nullptr && call_instruction->getCalledFunction() == &*operand)
+            continue;
+
+          // exception 2: constant operands from GEP and extractvalue are not
+          // needed, as they get encoded in the instruction itself
+          if (instruction->getOpcode() == llvm::Instruction::GetElementPtr || instruction->getOpcode() == llvm::Instruction::ExtractValue)
             continue;
 
           // lookup value index for constant or create a new one if needed
@@ -598,9 +605,6 @@ void ContextBuilder::TranslateFunction() {
 
     for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin(); instr_iterator != bb->end(); ++instr_iterator) {
       const llvm::Instruction *instruction = instr_iterator;
-
-      // DEBUG
-      //LOG_DEBUG("Interpreter translating: %s\n", CodeGen::Print(instruction).c_str());
 
       switch (instruction->getOpcode()) {
         // Terminators

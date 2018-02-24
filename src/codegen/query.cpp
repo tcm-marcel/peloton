@@ -57,6 +57,7 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
     } catch (interpreter::NotSupportedException e) {
       // DEBUG
       LOG_INFO("query not supported by interpreter: %s", e.what());
+
       CompileAndExecute(func_args, stats);
     }
   } else {
@@ -207,11 +208,9 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   // Call init
   LOG_TRACE("Calling query's init() ...");
   try {
-    interpreter::QueryInterpreter init_interpreter(init_bytecode);
-    init_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+    interpreter::QueryInterpreter::ExecuteFunction(init_bytecode, reinterpret_cast<char *>(function_arguments));
   } catch (...) {
-    interpreter::QueryInterpreter tear_down_interpreter(tear_down_bytecode);
-    tear_down_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+    interpreter::QueryInterpreter::ExecuteFunction(tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
     throw;
   }
 
@@ -226,11 +225,9 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
-    interpreter::QueryInterpreter plan_interpreter(plan_bytecode);
-    plan_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+    interpreter::QueryInterpreter::ExecuteFunction(plan_bytecode, reinterpret_cast<char *>(function_arguments));
   } catch (...) {
-    interpreter::QueryInterpreter tear_down_interpreter(tear_down_bytecode);
-    tear_down_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+    interpreter::QueryInterpreter::ExecuteFunction(tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
     throw;
   }
 
@@ -244,8 +241,7 @@ bool Query::Interpret(FunctionArguments *function_arguments,
 
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
-  interpreter::QueryInterpreter tear_down_interpreter(tear_down_bytecode);
-  tear_down_interpreter.ExecuteFunction(reinterpret_cast<char *>(function_arguments));
+  interpreter::QueryInterpreter::ExecuteFunction(tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
 
   // No need to cleanup if we get an exception while cleaning up...
   if (stats != nullptr) {

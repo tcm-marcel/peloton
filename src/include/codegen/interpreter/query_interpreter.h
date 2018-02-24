@@ -35,16 +35,15 @@ class QueryInterpreter {
  public:
   explicit QueryInterpreter(const InterpreterContext &context);
 
-  void ExecuteFunction(char *param);
-  void ExecuteFunction(const std::vector<value_t> &arguments);
-
   static value_t ExecuteFunction(const InterpreterContext &context, const std::vector<value_t> &arguments);
+  static void ExecuteFunction(const InterpreterContext &context, char *param);
+
+ private:
+  void ExecuteFunction(const std::vector<value_t> &arguments);
+  void InitializeActivationRecord(const std::vector<value_t> &arguments);
 
   template <typename type_t>
   type_t GetReturnValue();
-
- private:
-  void InitializeActivationRecord(const std::vector<value_t> &arguments);
 
   template <typename type_t>
   ALWAYS_INLINE inline type_t GetValue(const index_t index) {

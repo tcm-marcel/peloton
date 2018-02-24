@@ -119,7 +119,8 @@ class CodeContext {
   size_t GetTypeAllocSizeInBits(llvm::Type *type) const;
 
   // Dump the contents of all the code in this context
-  void DumpContents() const;
+  // Attention: this function may change the IR!
+  void DumpContents();
 
   //===--------------------------------------------------------------------===//
   // ACCESSORS
