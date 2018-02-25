@@ -39,6 +39,12 @@ const char *InterpreterContext::GetOpcodeString(Opcode opcode) {
   }
 }
 
+#ifndef NDEBUG
+const llvm::Instruction *InterpreterContext::GetIRInstructionFromIP(index_t instr_slot) {
+  return instruction_trace_.at(instr_slot);
+}
+#endif
+
 size_t InterpreterContext::GetInstructionSlotSize(const Instruction* instruction) {
   switch (instruction->op) {
 

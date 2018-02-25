@@ -78,9 +78,9 @@ class ContextBuilder {
   } Valueliveliness;
 
   /**
-   * Special NULL-value for liveness information
+   * NULL-value for liveness information
    */
-  static const index_t valuelivelinessUnknown = std::numeric_limits<index_t>::max();
+  static const index_t valueLivelinessUnknown = std::numeric_limits<index_t>::max();
 
  private:
   ContextBuilder(const CodeContext &code_context, const llvm::Function *function);

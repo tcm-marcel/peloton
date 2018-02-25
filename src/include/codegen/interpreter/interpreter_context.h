@@ -137,6 +137,10 @@ class InterpreterContext {
     return index;
   }
 
+  #ifndef NDEBUG
+  const llvm::Instruction *GetIRInstructionFromIP(index_t instr_slot);
+  #endif
+
   /**
    * Returns the number of slots a given instruction occupies in the bytecode stream
    * @param instruction pointer to the instruction inside the bytecode

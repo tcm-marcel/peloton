@@ -140,18 +140,6 @@ uintptr_t QueryInterpreter::AllocateMemory(size_t number_bytes) {
   return raw_pointer;
 }
 
-
-#ifndef NDEBUG
-const llvm::Instruction *QueryInterpreter::GetIRInstructionFromIP(const Instruction *ip) {
-  index_t index = context_.GetIndexFromIP(ip);
-  return GetIRInstructionFromIP(static_cast<index_t>(index));
-}
-
-const llvm::Instruction *QueryInterpreter::GetIRInstructionFromIP(index_t instr_slot) {
-  return context_.instruction_trace_.at(instr_slot);
-}
-#endif
-
 }  // namespace interpreter
 }  // namespace codegen
 }  // namespace peloton

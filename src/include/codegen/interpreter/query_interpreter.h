@@ -643,13 +643,6 @@ class QueryInterpreter {
 
   //--------------------------------------------------------------------------//
 
-
- private:
-#ifndef NDEBUG
-  const llvm::Instruction *GetIRInstructionFromIP(const Instruction *ip);
-  const llvm::Instruction *GetIRInstructionFromIP(index_t instr_slot);
-#endif
-
  private:
   static void *label_pointers_[InterpreterContext::GetNumberOpcodes()];
 

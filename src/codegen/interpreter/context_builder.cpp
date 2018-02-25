@@ -43,7 +43,7 @@ InterpreterContext ContextBuilder::CreateInterpreterContext(const CodeContext &c
 
   printf("Mapping:\n");
   for (unsigned int i = 0; i < builder.value_slots_.size(); i++) {
-    if (builder.value_liveliness_[i].last_usage < valuelivelinessUnknown) {
+    if (builder.value_liveliness_[i].last_usage < valueLivelinessUnknown) {
       printf("%u;%u;%u\n",
                builder.value_slots_[i],
                builder.value_liveliness_[i].definition,
@@ -238,7 +238,7 @@ ContextBuilder::value_index_t ContextBuilder::CreateValueIndex(const llvm::Value
 
   value_index_t value_index = value_liveliness_.size();
   value_mapping_[value] = value_index;
-  value_liveliness_.push_back({valuelivelinessUnknown, valuelivelinessUnknown});
+  value_liveliness_.push_back({valueLivelinessUnknown, valueLivelinessUnknown});
 
   return value_index;
 }
@@ -330,13 +330,13 @@ index_t ContextBuilder::GetValueSlot(const llvm::Value *value) const {
 
 void ContextBuilder::AddValueDefinition(value_index_t value_index,
                                    ContextBuilder::instruction_index_t definition) {
-  PL_ASSERT(value_liveliness_[value_index].definition == valuelivelinessUnknown);
+  PL_ASSERT(value_liveliness_[value_index].definition == valueLivelinessUnknown);
   value_liveliness_[value_index].definition = definition;
 }
 
 void ContextBuilder::AddValueUsage(value_index_t value_index,
                                    ContextBuilder::instruction_index_t usage) {
-  if (value_liveliness_[value_index].last_usage == valuelivelinessUnknown)
+  if (value_liveliness_[value_index].last_usage == valueLivelinessUnknown)
     value_liveliness_[value_index].last_usage = usage;
   else
     value_liveliness_[value_index].last_usage = std::max(value_liveliness_[value_index].last_usage, usage);
@@ -422,7 +422,7 @@ void ContextBuilder::AnalyseFunction() {
   instruction_index_t instruction_index = 0;
   for (llvm::ReversePostOrderTraversal<const llvm::Function *>::rpo_iterator
            traversal_iterator = rpo_traversal_.begin();
-       traversal_iterator != rpo_traversal_.end(); ++traversal_iterator, ++instruction_index) {
+       traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
     const llvm::BasicBlock* bb = *traversal_iterator;
 
     // Add basic block to rpo vector for pred/succ lookups
@@ -432,7 +432,7 @@ void ContextBuilder::AnalyseFunction() {
     // There are exceptions for several instructions,
     // which are labeled and explained below.
     for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin();
-         instr_iterator != bb->end(); ++instr_iterator) {
+         instr_iterator != bb->end(); ++instr_iterator, ++instruction_index) {
       const llvm::Instruction *instruction = instr_iterator;
 
       bool is_phi = false;
@@ -551,22 +551,16 @@ void ContextBuilder::AnalyseFunction() {
                   overflow_results_mapping_[call_instruction].first == nullptr);
               overflow_results_mapping_[call_instruction].first =
                   extract_instruction;
-
-              value_index_t
-                  extract_value_index = CreateValueIndex(extract_instruction);
-              AddValueDefinition(extract_value_index, instruction_index);
-
             } else if (extract_index == 1) {
               PL_ASSERT(overflow_results_mapping_[call_instruction].second
                             == nullptr);
               overflow_results_mapping_[call_instruction].second =
                   extract_instruction;
-
-              value_index_t
-                  extract_value_index = CreateValueIndex(extract_instruction);
-              AddValueDefinition(extract_value_index, instruction_index);
-
             }
+
+            value_index_t
+                extract_value_index = CreateValueIndex(extract_instruction);
+            AddValueDefinition(extract_value_index, instruction_index);
           }
 
           continue;
@@ -622,7 +616,7 @@ void ContextBuilder::PerformNaiveRegisterAllocation() {
   // iterate over other entries, which are already sorted
   for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
     // skip values that start at zero or that are never used
-    if (value_liveliness_[i].last_usage == valuelivelinessUnknown)
+    if (value_liveliness_[i].last_usage == valueLivelinessUnknown)
       continue;
 
     value_slots_[i] = reg++ + 1; // + 1 because 0 is dummy slot
@@ -660,7 +654,7 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
 
   // get all entries with .definition = 0
   for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
-    if (value_liveliness_[i].definition == 0 && value_liveliness_[i].last_usage != valuelivelinessUnknown) {
+    if (value_liveliness_[i].definition == 0 && value_liveliness_[i].last_usage != valueLivelinessUnknown) {
       registers.push_back(value_liveliness_[i]);
       value_slots_[i] = registers.size() - 1 + 1; // + 1 because 0 is dummy slot
     }
@@ -673,7 +667,7 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
   // iterate over other entries, which are already sorted
   for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
     // skip values that start at zero or that are never used
-    if (value_liveliness_[i].definition == 0 || value_liveliness_[i].last_usage == valuelivelinessUnknown)
+    if (value_liveliness_[i].definition == 0 || value_liveliness_[i].last_usage == valueLivelinessUnknown)
       continue;
 
 #ifndef NDEBUG
@@ -1405,10 +1399,10 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
 
       PL_ASSERT(overflow_results_mapping_.find(call_instruction) != overflow_results_mapping_.end());
 
-      if (std::get<0>(overflow_results_mapping_[call_instruction]) != nullptr)
-        result = GetValueIndex(std::get<0>(overflow_results_mapping_[call_instruction]));
-      if (std::get<1>(overflow_results_mapping_[call_instruction]) != nullptr)
-        overflow = GetValueIndex(std::get<1>(overflow_results_mapping_[call_instruction]));
+      if (overflow_results_mapping_[call_instruction].first != nullptr)
+        result = GetValueIndex(overflow_results_mapping_[call_instruction].first);
+      if (overflow_results_mapping_[call_instruction].second != nullptr)
+        overflow = GetValueIndex(overflow_results_mapping_[call_instruction].second);
 
 
       if (function_name.substr(5, 4) == "uadd") {
