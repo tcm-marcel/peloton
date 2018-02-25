@@ -138,7 +138,7 @@ class InterpreterContext {
   }
 
   #ifndef NDEBUG
-  const llvm::Instruction *GetIRInstructionFromIP(index_t instr_slot);
+  const llvm::Instruction *GetIRInstructionFromIP(index_t instr_slot) const;
   #endif
 
   /**

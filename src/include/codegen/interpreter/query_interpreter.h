@@ -497,15 +497,15 @@ class QueryInterpreter {
              call_activation.return_pointer, reinterpret_cast<void **>(call_activation.value_pointers.data()));
 
     // DEBUG
-#ifdef LOG_TRACE_ENABLED
+#ifdef LOG_DEBUG_ENABLED
     if (context_.external_call_contexts_[call_instruction->external_call_context].dest_type != &ffi_type_void) {
       std::ostringstream output;
       value_t value =
           GetValue<value_t>(context_.external_call_contexts_[call_instruction->external_call_context].dest_slot);
-      output << " -> [" << std::dec << std::setw(3)
+      output << "  [" << std::dec << std::setw(3)
              << context_.external_call_contexts_[call_instruction->external_call_context].dest_slot
-             << "] = " << value << " / 0x" << std::hex << value << ",";
-      LOG_TRACE("%s\n", output.str().c_str());
+             << "] <= " << value << " / 0x" << std::hex << value << ",";
+      printf("%s\n", output.str().c_str());
     }
 #endif
 

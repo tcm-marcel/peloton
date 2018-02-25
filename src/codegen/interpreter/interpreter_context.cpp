@@ -40,7 +40,7 @@ const char *InterpreterContext::GetOpcodeString(Opcode opcode) {
 }
 
 #ifndef NDEBUG
-const llvm::Instruction *InterpreterContext::GetIRInstructionFromIP(index_t instr_slot) {
+const llvm::Instruction *InterpreterContext::GetIRInstructionFromIP(index_t instr_slot) const {
   return instruction_trace_.at(instr_slot);
 }
 #endif
@@ -65,10 +65,24 @@ size_t InterpreterContext::GetInstructionSlotSize(const Instruction* instruction
 std::string InterpreterContext::DumpContents() const {
   std::ostringstream output;
 
+#ifndef NDEBUG
+  const llvm::BasicBlock *bb;
+#endif
+
   // Print Bytecode
   output << "Bytecode:" << std::endl;
   for (index_t i = 0; i < bytecode_.size();) {
     auto *instruction = GetIPFromIndex(i);
+
+#ifndef NDEBUG
+    const llvm::Instruction *llvm_instruction = GetIRInstructionFromIP(i);
+    if (llvm_instruction->getOpcode() != llvm::Instruction::PHI) {
+      if (i > 0 && bb != llvm_instruction->getParent()) {
+        output << llvm_instruction->getParent()->getName().str() << ":" << std::endl;
+      }
+      bb = llvm_instruction->getParent();
+    }
+#endif
 
     output << Dump(instruction) << std::endl;
     i += GetInstructionSlotSize(instruction);
@@ -138,7 +152,22 @@ std::string InterpreterContext::Dump(const Instruction *instruction) const {
       break;
 #endif
 
-      // TODO: add other instructions (overflow intrinsics, internal call)
+#define HANDLE_SELECT_INST(opcode) \
+    case Opcode::opcode: \
+      output << "[" << std::setw(3) << instruction->args[0] << "] "; \
+      output << "[" << std::setw(3) << instruction->args[1] << "] "; \
+      output << "[" << std::setw(3) << instruction->args[2] << "] "; \
+      output << "[" << std::setw(3) << instruction->args[3] << "] "; \
+      break;
+
+#define HANDLE_OVERFLOW_TYPED_INST(op, type) \
+    case Opcode::op ## _ ## type: \
+      output << "[" << std::setw(3) << instruction->args[0] << "] "; \
+      output << "[" << std::setw(3) << instruction->args[1] << "] "; \
+      output << "[" << std::setw(3) << instruction->args[2] << "] "; \
+      output << "[" << std::setw(3) << instruction->args[3] << "] "; \
+      break;
+
 
 #include "codegen/interpreter/bytecode_instructions.def"
 
@@ -148,7 +177,7 @@ std::string InterpreterContext::Dump(const Instruction *instruction) const {
   }
 
 #ifndef NDEBUG
-  output << "(" << CodeGen::Print(static_cast<const llvm::Value *>(instruction_trace_[GetIndexFromIP(instruction)])) << ")";
+  output << "(" << CodeGen::Print(GetIRInstructionFromIP(GetIndexFromIP(instruction))) << ")";
 #endif
 
   return output.str();

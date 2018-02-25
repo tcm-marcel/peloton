@@ -551,17 +551,23 @@ void ContextBuilder::AnalyseFunction() {
                   overflow_results_mapping_[call_instruction].first == nullptr);
               overflow_results_mapping_[call_instruction].first =
                   extract_instruction;
+
             } else if (extract_index == 1) {
               PL_ASSERT(overflow_results_mapping_[call_instruction].second
                             == nullptr);
               overflow_results_mapping_[call_instruction].second =
                   extract_instruction;
+
             }
 
             value_index_t
                 extract_value_index = CreateValueIndex(extract_instruction);
             AddValueDefinition(extract_value_index, instruction_index);
           }
+
+          // Do not process the result of this instruction,
+          // as this value (the overflow result struct) doesn't exist
+          // later in the bytecode.
 
           continue;
         }
@@ -1400,9 +1406,9 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
       PL_ASSERT(overflow_results_mapping_.find(call_instruction) != overflow_results_mapping_.end());
 
       if (overflow_results_mapping_[call_instruction].first != nullptr)
-        result = GetValueIndex(overflow_results_mapping_[call_instruction].first);
+        result = GetValueSlot(overflow_results_mapping_[call_instruction].first);
       if (overflow_results_mapping_[call_instruction].second != nullptr)
-        overflow = GetValueIndex(overflow_results_mapping_[call_instruction].second);
+        overflow = GetValueSlot(overflow_results_mapping_[call_instruction].second);
 
 
       if (function_name.substr(5, 4) == "uadd") {
