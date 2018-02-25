@@ -142,19 +142,36 @@ class InterpreterContext {
   #endif
 
   /**
-   * Returns the number of slots a given instruction occupies in the bytecode stream
+   * Returns the number of slots a given instruction occupies in the bytecode
+   * stream.
    * @param instruction pointer to the instruction inside the bytecode
    * @return number of slots (each 8 Byte) that are used by this instruction
    */
   static size_t GetInstructionSlotSize(const Instruction *instruction);
 
+  /**
+   * Returns the number of slots a given internal call instruction occupies in the bytecode stream. Internal instructions have a variable length, so the size has to be calculated.
+   * @param instruction pointer to instruction of type internal call
+   * @return number of slots (each 8 Byte) that are used by this instruction
+   */
   static ALWAYS_INLINE inline size_t GetInteralCallInstructionSlotSize(const InternalCallInstruction *instruction) {
     const size_t number_slots = ((2 * (4 + instruction->number_args)) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
     PL_ASSERT(number_slots > 0);
     return number_slots;
   }
 
+  /***
+   * Dump the bytecode and the constants of this interpreter context
+   * @return string containing the dumped information
+   */
   std::string DumpContents() const;
+
+  /**
+   * Gives a textual representation of the given instruction. (and the
+   * LLVM instruction it originates from, if Debug mode is enabled)
+   * @param instruction instruction of this context
+   * @return string containing a textual representatino of the instruction
+   */
   std::string Dump(const Instruction *instruction) const;
 
  private:

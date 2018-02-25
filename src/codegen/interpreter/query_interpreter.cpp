@@ -50,7 +50,6 @@ __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction
 
   }
 
-  printf("running interpreter:\n");
   InitializeActivationRecord(arguments);
 
   const Instruction *bytecode = reinterpret_cast<const Instruction *>(&context_.bytecode_[0]);
