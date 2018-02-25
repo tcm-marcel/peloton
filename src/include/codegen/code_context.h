@@ -120,7 +120,7 @@ class CodeContext {
 
   // Dump the contents of all the code in this context
   // Attention: this function may change the IR!
-  void DumpContents();
+  void DumpContents() const ;
 
   //===--------------------------------------------------------------------===//
   // ACCESSORS

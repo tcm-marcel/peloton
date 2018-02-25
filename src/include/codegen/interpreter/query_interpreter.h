@@ -16,10 +16,6 @@
 #include "codegen/query.h"
 #include "include/common/exception.h"
 
-// DEBUG
-#include "codegen/interpreter/context_builder.h"
-#include "interpreter_context.h"
-
 namespace peloton {
 namespace codegen {
 namespace interpreter {
@@ -65,7 +61,7 @@ class QueryInterpreter {
 #ifdef LOG_TRACE_ENABLED
     std::ostringstream output;
     output << "  [" << std::dec << std::setw(3) << index << "] <= " << value << "/0x" << std::hex << value;
-    LOG_DEBUG("%s", output.str().c_str());
+    LOG_TRACE("%s", output.str().c_str());
 #endif
   }
 
@@ -657,7 +653,8 @@ class QueryInterpreter {
  private:
   static void *label_pointers_[InterpreterContext::GetNumberOpcodes()];
 
-  std::vector<value_t> values_;
+  // 64 Byte is common for cache lines
+  alignas(64) std::vector<value_t> values_;
   std::vector<std::unique_ptr<char[]>> allocations_;
   std::vector<CallActivation> call_activations_;
 

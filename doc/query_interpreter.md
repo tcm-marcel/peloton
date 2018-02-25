@@ -49,10 +49,13 @@ The ContextBuilder works in 4 steps:
 3. Translation
 4. Finalization
 
+Internal the ContextBuilder assigns indexes to LLVM values and instructions, which are usually only accessed by raw pointers. They are used to merge several LLVM values and to compute liveliness. 
+Those indexes stay inside the ContextBuilder and do not end up in the InterpreterContext. They are completely independent from the indexes in the InterpreterContext! 
+
 #### 1. Analysis
 Analysis the LLVM function and creates additional information, but doesn't create bytecode. 
 
-* determining liveness of all LLVM values (definition and last usage)
+* determining liveliness of all LLVM values (definition and last usage)
   * linear scan algorithm using reverse post order traversal of basic blocks
   * the scheduling of the basic blocks is determined by the reverse post order traversal to make this work
 * merges LLVM values that are equivalent, e.g. when LLVM instructions translate to NOPs
@@ -101,9 +104,10 @@ For every invocation of a function, a new activation record is created, so recur
 
 * not complete LLVM IR instruction coverage
   * LLVM vector types are not supported
-  * *but* every query that is created by our test cases is currently supported
 * LLVM values are restricted to max. 8 byte
   * usually not a problem, except we start introducing SIMD inside codegen
+
+*But* every query that is currently created by our test cases is supported. 
 
 ## Future Work
 >Write down future work to fix known problems or otherwise improve the component.

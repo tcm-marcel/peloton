@@ -260,7 +260,7 @@ const llvm::DataLayout &CodeContext::GetDataLayout() const {
   return module_->getDataLayout();
 }
 
-void CodeContext::DumpContents() {
+void CodeContext::DumpContents() const {
   std::error_code error_code;
 
   // First, write out the LLVM IR file

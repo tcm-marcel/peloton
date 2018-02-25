@@ -132,7 +132,7 @@ std::string InterpreterContext::Dump(const Instruction *instruction) const {
       break;
 #endif
 
-      //TODO: add other instructions (overflow intrinsics, internal call)
+      // TODO: add other instructions (overflow intrinsics, internal call)
 
 #include "codegen/interpreter/bytecode_instructions.def"
 

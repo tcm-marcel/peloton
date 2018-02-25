@@ -118,7 +118,7 @@ CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, sitofloat)
 CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, uitofloat)
 
 HANDLE_INST(gep_offset)                            // struct access of GEP instruction (accumulated)
-CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, gep_array) // array access of GEP instruction (inline)
+CREATE_FOR_INT_TYPES(HANDLE_TYPED_INST, gep_array) // array access of GEP instruction (inplace)
 HANDLE_INST(phi_mov)
 HANDLE_INST(nop_mov)
 HANDLE_SELECT_INST(select)
