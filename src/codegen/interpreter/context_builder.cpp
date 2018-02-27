@@ -516,48 +516,54 @@ void ContextBuilder::AnalyseFunction() {
         // (unfortunately there is no better way to check this)
         auto *call_instruction = llvm::cast<llvm::CallInst>(instruction);
         llvm::Function *function = call_instruction->getCalledFunction();
-        if (function->isDeclaration()
-            && function->getName().str().substr(10, 13) == "with.overflow") {
+        if (function->isDeclaration()) {
+          std::string function_name = function->getName().str();
 
-          // create entry for this call
-          overflow_results_mapping_[call_instruction] =
-              std::make_pair(nullptr, nullptr);
+          if (function_name.size() >= 14
+              && function_name.substr(10, 13) == "with.overflow") {
 
-          // Find the first ExtractValue instruction referring to this call
-          // instruction for result and overflow each and put it in the
-          // value_liveliness vector here. The liveliness of those instructions
-          // has to be extended to the definition of the call instruction,
-          // and this way we ensure that the vector is sorted by .definition
-          // and we avoid sorting it later.
-          for (auto *user : call_instruction->users()) {
-            auto
-                *extract_instruction = llvm::cast<llvm::ExtractValueInst>(user);
-            size_t extract_index = *extract_instruction->idx_begin();
+            // create entry for this call
+            overflow_results_mapping_[call_instruction] =
+                std::make_pair(nullptr, nullptr);
 
-            if (extract_index == 0) {
-              PL_ASSERT(
-                  overflow_results_mapping_[call_instruction].first == nullptr);
-              overflow_results_mapping_[call_instruction].first =
-                  extract_instruction;
+            // Find the first ExtractValue instruction referring to this call
+            // instruction for result and overflow each and put it in the
+            // value_liveliness vector here. The liveliness of those instructions
+            // has to be extended to the definition of the call instruction,
+            // and this way we ensure that the vector is sorted by .definition
+            // and we avoid sorting it later.
+            for (auto *user : call_instruction->users()) {
+              auto
+                  *extract_instruction =
+                  llvm::cast<llvm::ExtractValueInst>(user);
+              size_t extract_index = *extract_instruction->idx_begin();
 
-            } else if (extract_index == 1) {
-              PL_ASSERT(overflow_results_mapping_[call_instruction].second
-                            == nullptr);
-              overflow_results_mapping_[call_instruction].second =
-                  extract_instruction;
+              if (extract_index == 0) {
+                PL_ASSERT(
+                    overflow_results_mapping_[call_instruction].first
+                        == nullptr);
+                overflow_results_mapping_[call_instruction].first =
+                    extract_instruction;
 
+              } else if (extract_index == 1) {
+                PL_ASSERT(overflow_results_mapping_[call_instruction].second
+                              == nullptr);
+                overflow_results_mapping_[call_instruction].second =
+                    extract_instruction;
+
+              }
+
+              value_index_t
+                  extract_value_index = CreateValueIndex(extract_instruction);
+              AddValueDefinition(extract_value_index, instruction_index);
             }
 
-            value_index_t
-                extract_value_index = CreateValueIndex(extract_instruction);
-            AddValueDefinition(extract_value_index, instruction_index);
+            // Do not process the result of this instruction,
+            // as this value (the overflow result struct) doesn't exist
+            // later in the bytecode.
+
+            continue;
           }
-
-          // Do not process the result of this instruction,
-          // as this value (the overflow result struct) doesn't exist
-          // later in the bytecode.
-
-          continue;
         }
       }
 
@@ -1510,7 +1516,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
     // intrinsic) is to check the function name string
     std::string function_name = function->getName().str();
 
-    if (function_name.substr(0, 11) == "llvm.memcpy") {
+    if (function_name.size() >= 12 && function_name.substr(0, 11) == "llvm.memcpy") {
       if (call_instruction->getOperand(2)->getType() != code_context_.int64_type_)
         throw NotSupportedException("memcpy with different size type than i64 not supported");
 
@@ -1519,7 +1525,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.substr(0, 12) == "llvm.memmove") {
+    } else if (function_name.size() >= 13 && function_name.substr(0, 12) == "llvm.memmove") {
       if (call_instruction->getOperand(2)->getType() != code_context_.int64_type_)
         throw NotSupportedException("memmove with different size type than i64 not supported");
 
@@ -1528,7 +1534,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.substr(0, 11) == "llvm.memset") {
+    } else if (function_name.size() >= 12 && function_name.substr(0, 11) == "llvm.memset") {
       if (call_instruction->getOperand(2)->getType() != code_context_.int64_type_)
         throw NotSupportedException("memset with different size type than i64 not supported");
 
@@ -1537,7 +1543,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.substr(10, 13) == "with.overflow") {
+    } else if (function_name.size() >= 14 && function_name.substr(10, 13) == "with.overflow") {
       index_t result = 0;
       index_t overflow = 0;
       auto *type = call_instruction->getOperand(0)->getType();
@@ -1574,7 +1580,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                    GetValueSlot(call_instruction->getOperand(0)),
                                    GetValueSlot(call_instruction->getOperand(1)));
 
-    } else if (function_name.substr(0, 26) == "llvm.x86.sse42.crc32.64.64") {
+    } else if (function_name.size() >= 27 && function_name.substr(0, 26) == "llvm.x86.sse42.crc32.64.64") {
       if (call_instruction->getType() != code_context_.int64_type_)
         throw NotSupportedException("sse42.crc32 with different size type than i64 not supported");
 

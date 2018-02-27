@@ -168,6 +168,8 @@ void CodeContext::RegisterExternalFunction(llvm::Function *func_decl,
       "The first argument must be a function declaration");
   PL_ASSERT(func_impl != nullptr && "The function pointer cannot be NULL");
   functions_.emplace_back(func_decl, func_impl);
+
+  builtins_[func_decl->getName()] = std::make_pair(func_decl, func_impl);
 }
 
 void CodeContext::RegisterBuiltin(llvm::Function *func_decl,
