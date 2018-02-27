@@ -10,14 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 #include "codegen/interpreter/interpreter_context.h"
 #include "codegen/codegen.h"
 
-#include <string>
-#include <sstream>
-#include <iomanip>
 #include <include/codegen/interpreter/interpreter_context.h>
+#include <iomanip>
+#include <sstream>
+#include <string>
 
 namespace peloton {
 namespace codegen {
@@ -25,10 +24,9 @@ namespace interpreter {
 
 const char *InterpreterContext::GetOpcodeString(Opcode opcode) {
   switch (opcode) {
-
 #define HANDLE_INST(opcode) \
-      case Opcode::opcode: \
-        return #opcode; \
+  case Opcode::opcode:      \
+    return #opcode;
 
 #include "codegen/interpreter/bytecode_instructions.def"
 
@@ -40,19 +38,31 @@ const char *InterpreterContext::GetOpcodeString(Opcode opcode) {
 }
 
 #ifndef NDEBUG
-const llvm::Instruction *InterpreterContext::GetIRInstructionFromIP(index_t instr_slot) const {
+const llvm::Instruction *InterpreterContext::GetIRInstructionFromIP(
+    index_t instr_slot) const {
   return instruction_trace_.at(instr_slot);
 }
 #endif
 
-size_t InterpreterContext::GetInstructionSlotSize(const Instruction* instruction) {
+size_t InterpreterContext::GetInstructionSlotSize(
+    const Instruction *instruction) {
   switch (instruction->op) {
-
-#define HANDLE_INST(op) case Opcode::op: return 1;
-#define HANDLE_EXTERNAL_CALL_INST(op) case Opcode::op: return 2;
-#define HANDLE_INTERNAL_CALL_INST(op) case Opcode::op: return GetInteralCallInstructionSlotSize(reinterpret_cast<const InternalCallInstruction *>(instruction));
-#define HANDLE_SELECT_INST(op) case Opcode::op: return 2;
-#define HANDLE_OVERFLOW_TYPED_INST(op, type) case Opcode::op ## _ ## type: return 2;
+#define HANDLE_INST(op) \
+  case Opcode::op:      \
+    return 1;
+#define HANDLE_EXTERNAL_CALL_INST(op) \
+  case Opcode::op:                    \
+    return 2;
+#define HANDLE_INTERNAL_CALL_INST(op)         \
+  case Opcode::op:                            \
+    return GetInteralCallInstructionSlotSize( \
+        reinterpret_cast<const InternalCallInstruction *>(instruction));
+#define HANDLE_SELECT_INST(op) \
+  case Opcode::op:             \
+    return 2;
+#define HANDLE_OVERFLOW_TYPED_INST(op, type) \
+  case Opcode::op##_##type:                  \
+    return 2;
 
 #include "codegen/interpreter/bytecode_instructions.def"
 
@@ -78,7 +88,8 @@ std::string InterpreterContext::DumpContents() const {
     const llvm::Instruction *llvm_instruction = GetIRInstructionFromIP(i);
     if (llvm_instruction->getOpcode() != llvm::Instruction::PHI) {
       if (i > 0 && bb != llvm_instruction->getParent()) {
-        output << llvm_instruction->getParent()->getName().str() << ":" << std::endl;
+        output << llvm_instruction->getParent()->getName().str() << ":"
+               << std::endl;
       }
       bb = llvm_instruction->getParent();
     }
@@ -89,10 +100,11 @@ std::string InterpreterContext::DumpContents() const {
   }
 
   // Print Constants
-  if (constants_.size() > 0)
-    output << "Constants:" << std::endl;
+  if (constants_.size() > 0) output << "Constants:" << std::endl;
   for (auto &constant : constants_) {
-    output << "[" << std::setw(3) << std::dec << constant.second << "] = " << *reinterpret_cast< const int64_t *>(&constant.first) << " 0x" << std::hex << constant.first << std::endl;
+    output << "[" << std::setw(3) << std::dec << constant.second
+           << "] = " << *reinterpret_cast<const int64_t *>(&constant.first)
+           << " 0x" << std::hex << constant.first << std::endl;
   }
 
   output << std::endl;
@@ -106,78 +118,118 @@ std::string InterpreterContext::Dump(const Instruction *instruction) const {
   output << std::setw(18) << GetOpcodeString(instruction->op) << " ";
 
   switch (instruction->op) {
-
-#define HANDLE_INST(opcode) \
-    case Opcode::opcode: \
-      output << "[" << std::setw(3) << instruction->args[0] << "] "; \
-      output << "[" << std::setw(3) << instruction->args[1] << "] "; \
-      output << "[" << std::setw(3) << instruction->args[2] << "] "; \
-      break;
+#define HANDLE_INST(opcode)                                        \
+  case Opcode::opcode:                                             \
+    output << "[" << std::setw(3) << instruction->args[0] << "] "; \
+    output << "[" << std::setw(3) << instruction->args[1] << "] "; \
+    output << "[" << std::setw(3) << instruction->args[2] << "] "; \
+    break;
 
 #ifndef NDEBUG
-#define HANDLE_EXTERNAL_CALL_INST(opcode) \
-    case Opcode::opcode: \
-      output << "[" << std::setw(3) << external_call_contexts_[reinterpret_cast<const ExternalCallInstruction *>(instruction)->external_call_context].dest_slot << "] "; \
-      for (auto arg : external_call_contexts_[instruction->args[0]].args) { \
-        output << "[" << std::setw(3) << arg << "] "; \
-      } \
-      output << "(" << static_cast<const llvm::CallInst *>(instruction_trace_[GetIndexFromIP(instruction)])->getCalledFunction()->getName().str() << ") "; \
-      break;
+#define HANDLE_EXTERNAL_CALL_INST(opcode)                                      \
+  case Opcode::opcode:                                                         \
+    output                                                                     \
+        << "[" << std::setw(3)                                                 \
+        << external_call_contexts_                                             \
+               [reinterpret_cast<const ExternalCallInstruction *>(instruction) \
+                    ->external_call_context]                                   \
+                   .dest_slot                                                  \
+        << "] ";                                                               \
+    for (auto arg : external_call_contexts_[instruction->args[0]].args) {      \
+      output << "[" << std::setw(3) << arg << "] ";                            \
+    }                                                                          \
+    output << "("                                                              \
+           << static_cast<const llvm::CallInst *>(                             \
+                  instruction_trace_[GetIndexFromIP(instruction)])             \
+                  ->getCalledFunction()                                        \
+                  ->getName()                                                  \
+                  .str()                                                       \
+           << ") ";                                                            \
+    break;
 #else
-#define HANDLE_CALL_INST(opcode) \
-    case Opcode::opcode: \
-      output << "[" << std::setw(3) << call_contexts_[reinterpret_cast<const CallInstruction *>(instruction)->call_context].dest_slot << "] "; \
-      for (auto arg : call_contexts_[instruction->args[0]].args) { \
-        output << "[" << std::setw(3) << arg << "] "; \
-      } \
-      break;
+#define HANDLE_CALL_INST(opcode)                                        \
+  case Opcode::opcode:                                                  \
+    output << "[" << std::setw(3)                                       \
+           << call_contexts_[reinterpret_cast<const CallInstruction *>( \
+                                 instruction)                           \
+                                 ->call_context]                        \
+                  .dest_slot                                            \
+           << "] ";                                                     \
+    for (auto arg : call_contexts_[instruction->args[0]].args) {        \
+      output << "[" << std::setw(3) << arg << "] ";                     \
+    }                                                                   \
+    break;
 #endif
 
 #ifndef NDEBUG
-#define HANDLE_INTERNAL_CALL_INST(opcode) \
-    case Opcode::opcode: \
-      output << "[" << std::setw(3) << reinterpret_cast<const InternalCallInstruction *>(instruction)->dest_slot << "] "; \
-      for (size_t i = 0; i < reinterpret_cast<const InternalCallInstruction *>(instruction)->number_args; i++) { \
-        output << "[" << std::setw(3) << reinterpret_cast<const InternalCallInstruction *>(instruction)->args[i] << "] "; \
-      } \
-      output << "(" << static_cast<const llvm::CallInst *>(instruction_trace_[GetIndexFromIP(instruction)])->getCalledFunction()->getName().str() << ") "; \
-      break;
+#define HANDLE_INTERNAL_CALL_INST(opcode)                                      \
+  case Opcode::opcode:                                                         \
+    output << "[" << std::setw(3)                                              \
+           << reinterpret_cast<const InternalCallInstruction *>(instruction)   \
+                  ->dest_slot                                                  \
+           << "] ";                                                            \
+    for (size_t i = 0;                                                         \
+         i < reinterpret_cast<const InternalCallInstruction *>(instruction)    \
+                 ->number_args;                                                \
+         i++) {                                                                \
+      output << "[" << std::setw(3)                                            \
+             << reinterpret_cast<const InternalCallInstruction *>(instruction) \
+                    ->args[i]                                                  \
+             << "] ";                                                          \
+    }                                                                          \
+    output << "("                                                              \
+           << static_cast<const llvm::CallInst *>(                             \
+                  instruction_trace_[GetIndexFromIP(instruction)])             \
+                  ->getCalledFunction()                                        \
+                  ->getName()                                                  \
+                  .str()                                                       \
+           << ") ";                                                            \
+    break;
 #else
-#define HANDLE_INTERNAL_CALL_INST(opcode) \
-    case Opcode::opcode: \
-      output << "[" << std::setw(3) << reinterpret_cast<const InternalCallInstruction *>(instruction)->dest_slot << "] "; \
-      for (size_t i = 0; i < reinterpret_cast<const InternalCallInstruction *>(instruction)->number_args; i++) { \
-        output << "[" << std::setw(3) << reinterpret_cast<const InternalCallInstruction *>(instruction)->args[i] << "] "; \
-      } \
-      break;
+#define HANDLE_INTERNAL_CALL_INST(opcode)                                      \
+  case Opcode::opcode:                                                         \
+    output << "[" << std::setw(3)                                              \
+           << reinterpret_cast<const InternalCallInstruction *>(instruction)   \
+                  ->dest_slot                                                  \
+           << "] ";                                                            \
+    for (size_t i = 0;                                                         \
+         i < reinterpret_cast<const InternalCallInstruction *>(instruction)    \
+                 ->number_args;                                                \
+         i++) {                                                                \
+      output << "[" << std::setw(3)                                            \
+             << reinterpret_cast<const InternalCallInstruction *>(instruction) \
+                    ->args[i]                                                  \
+             << "] ";                                                          \
+    }                                                                          \
+    break;
 #endif
 
-#define HANDLE_SELECT_INST(opcode) \
-    case Opcode::opcode: \
-      output << "[" << std::setw(3) << instruction->args[0] << "] "; \
-      output << "[" << std::setw(3) << instruction->args[1] << "] "; \
-      output << "[" << std::setw(3) << instruction->args[2] << "] "; \
-      output << "[" << std::setw(3) << instruction->args[3] << "] "; \
-      break;
+#define HANDLE_SELECT_INST(opcode)                                 \
+  case Opcode::opcode:                                             \
+    output << "[" << std::setw(3) << instruction->args[0] << "] "; \
+    output << "[" << std::setw(3) << instruction->args[1] << "] "; \
+    output << "[" << std::setw(3) << instruction->args[2] << "] "; \
+    output << "[" << std::setw(3) << instruction->args[3] << "] "; \
+    break;
 
-#define HANDLE_OVERFLOW_TYPED_INST(op, type) \
-    case Opcode::op ## _ ## type: \
-      output << "[" << std::setw(3) << instruction->args[0] << "] "; \
-      output << "[" << std::setw(3) << instruction->args[1] << "] "; \
-      output << "[" << std::setw(3) << instruction->args[2] << "] "; \
-      output << "[" << std::setw(3) << instruction->args[3] << "] "; \
-      break;
-
+#define HANDLE_OVERFLOW_TYPED_INST(op, type)                       \
+  case Opcode::op##_##type:                                        \
+    output << "[" << std::setw(3) << instruction->args[0] << "] "; \
+    output << "[" << std::setw(3) << instruction->args[1] << "] "; \
+    output << "[" << std::setw(3) << instruction->args[2] << "] "; \
+    output << "[" << std::setw(3) << instruction->args[3] << "] "; \
+    break;
 
 #include "codegen/interpreter/bytecode_instructions.def"
 
-    default: break;
-
-
+    default:
+      break;
   }
 
 #ifndef NDEBUG
-  output << "(" << CodeGen::Print(GetIRInstructionFromIP(GetIndexFromIP(instruction))) << ")";
+  output << "("
+         << CodeGen::Print(GetIRInstructionFromIP(GetIndexFromIP(instruction)))
+         << ")";
 #endif
 
   return output.str();

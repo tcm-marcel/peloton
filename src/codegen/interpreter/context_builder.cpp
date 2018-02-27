@@ -10,10 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 #include "codegen/interpreter/context_builder.h"
 #include "codegen/codegen.h"
-#include "include/common/exception.h"
+#include "common/exception.h"
 
 #include <llvm/IR/InstIterator.h>
 
@@ -21,9 +20,16 @@ namespace peloton {
 namespace codegen {
 namespace interpreter {
 
-ContextBuilder::ContextBuilder(const CodeContext &code_context, const llvm::Function *function) : number_value_slots_(0), number_temporary_value_slots_(0), rpo_traversal_(function), code_context_(code_context), llvm_function_(function) {}
+ContextBuilder::ContextBuilder(const CodeContext &code_context,
+                               const llvm::Function *function)
+    : number_value_slots_(0),
+      number_temporary_value_slots_(0),
+      rpo_traversal_(function),
+      code_context_(code_context),
+      llvm_function_(function) {}
 
-InterpreterContext ContextBuilder::CreateInterpreterContext(const CodeContext &code_context, const llvm::Function *function) {
+InterpreterContext ContextBuilder::CreateInterpreterContext(
+    const CodeContext &code_context, const llvm::Function *function) {
   ContextBuilder builder(code_context, function);
 
   builder.AnalyseFunction();
@@ -46,14 +52,16 @@ Opcode ContextBuilder::GetOpcodeForTypeAllTypes(Opcode untyped_op,
     return InterpreterContext::GetOpcodeFromId(id + 1);
   else if (type == code_context_.int32_type_)
     return InterpreterContext::GetOpcodeFromId(id + 2);
-  else if (type == code_context_.int64_type_ || type == code_context_.char_ptr_type_ || type->isPointerTy())
+  else if (type == code_context_.int64_type_ ||
+           type == code_context_.char_ptr_type_ || type->isPointerTy())
     return InterpreterContext::GetOpcodeFromId(id + 3);
   else if (type == code_context_.float_type_)
     return InterpreterContext::GetOpcodeFromId(id + 4);
   else if (type == code_context_.double_type_)
     return InterpreterContext::GetOpcodeFromId(id + 5);
   else
-    throw NotSupportedException("llvm type not supported: " + CodeGen::Print(type));
+    throw NotSupportedException("llvm type not supported: " +
+                                CodeGen::Print(type));
 }
 
 Opcode ContextBuilder::GetOpcodeForTypeIntTypes(Opcode untyped_op,
@@ -68,10 +76,12 @@ Opcode ContextBuilder::GetOpcodeForTypeIntTypes(Opcode untyped_op,
     return InterpreterContext::GetOpcodeFromId(id + 1);
   else if (type == code_context_.int32_type_)
     return InterpreterContext::GetOpcodeFromId(id + 2);
-  else if (type == code_context_.int64_type_ || type == code_context_.char_ptr_type_ || type->isPointerTy())
+  else if (type == code_context_.int64_type_ ||
+           type == code_context_.char_ptr_type_ || type->isPointerTy())
     return InterpreterContext::GetOpcodeFromId(id + 3);
   else
-    throw NotSupportedException("llvm type not supported: " + CodeGen::Print(type));
+    throw NotSupportedException("llvm type not supported: " +
+                                CodeGen::Print(type));
 }
 
 Opcode ContextBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
@@ -86,11 +96,12 @@ Opcode ContextBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
   if (type == code_context_.double_type_)
     return InterpreterContext::GetOpcodeFromId(id + 1);
   else
-    throw NotSupportedException("llvm type not supported: " + CodeGen::Print(type));
+    throw NotSupportedException("llvm type not supported: " +
+                                CodeGen::Print(type));
 }
 
 Opcode ContextBuilder::GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
-                                                llvm::Type *type) const {
+                                                    llvm::Type *type) const {
   index_t id = InterpreterContext::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
@@ -105,27 +116,26 @@ Opcode ContextBuilder::GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
     case 8:
       return InterpreterContext::GetOpcodeFromId(id + 3);
     default:
-      throw NotSupportedException("llvm type size not supported: " + CodeGen::Print(type));
+      throw NotSupportedException("llvm type size not supported: " +
+                                  CodeGen::Print(type));
   }
 }
 
 template <size_t number_instruction_slots>
-Instruction &ContextBuilder::InsertBytecodeInstruction(UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
-                                                       Opcode opcode,
-                                                       index_t arg0,
-                                                       index_t arg1,
-                                                       index_t arg2,
-                                                       index_t arg3,
-                                                       index_t arg4,
-                                                       index_t arg5,
-                                                       index_t arg6) {
+Instruction &ContextBuilder::InsertBytecodeInstruction(
+    UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction, Opcode opcode,
+    index_t arg0, index_t arg1, index_t arg2, index_t arg3, index_t arg4,
+    index_t arg5, index_t arg6) {
   PL_ASSERT(opcode != Opcode::undefined);
 
-  // If one instruction slot is selected, make sure only two arguments are passed
-  PL_ASSERT(number_instruction_slots > 1 || (arg3 == 0 && arg4 == 0 && arg5 == 0 && arg6 == 0));
+  // If one instruction slot is selected, make sure only two arguments are
+  // passed
+  PL_ASSERT(number_instruction_slots > 1 ||
+            (arg3 == 0 && arg4 == 0 && arg5 == 0 && arg6 == 0));
 
-  instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots, 0);
-  Instruction& instruction = *reinterpret_cast<Instruction *>(&slot);
+  instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(),
+                                                  number_instruction_slots, 0);
+  Instruction &instruction = *reinterpret_cast<Instruction *>(&slot);
   instruction.op = opcode;
   instruction.args[0] = arg0;
   instruction.args[1] = arg1;
@@ -136,82 +146,95 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(UNUSED_ATTRIBUTE const ll
   instruction.args[6] = arg6;
 
 #ifndef NDEBUG
-  context_.instruction_trace_.insert(context_.instruction_trace_.end(), number_instruction_slots, llvm_instruction);
+  context_.instruction_trace_.insert(context_.instruction_trace_.end(),
+                                     number_instruction_slots,
+                                     llvm_instruction);
 #endif
 
   return instruction;
 }
 
-Instruction &ContextBuilder::InsertBytecodeInstruction(const llvm::Instruction *llvm_instruction,
-                                                       Opcode opcode,
-                                                       const llvm::Value *arg0,
-                                                       const llvm::Value *arg1,
-                                                       const llvm::Value *arg2) {
+Instruction &ContextBuilder::InsertBytecodeInstruction(
+    const llvm::Instruction *llvm_instruction, Opcode opcode,
+    const llvm::Value *arg0, const llvm::Value *arg1, const llvm::Value *arg2) {
   PL_ASSERT(opcode != Opcode::undefined);
-  return InsertBytecodeInstruction(llvm_instruction, opcode, GetValueSlot(arg0), GetValueSlot(arg1), GetValueSlot(arg2));
+  return InsertBytecodeInstruction(llvm_instruction, opcode, GetValueSlot(arg0),
+                                   GetValueSlot(arg1), GetValueSlot(arg2));
 }
 
-Instruction &ContextBuilder::InsertBytecodeInstruction(const llvm::Instruction *llvm_instruction,
-                                                       Opcode opcode,
-                                                       const llvm::Value *arg0,
-                                                       const llvm::Value *arg1) {
+Instruction &ContextBuilder::InsertBytecodeInstruction(
+    const llvm::Instruction *llvm_instruction, Opcode opcode,
+    const llvm::Value *arg0, const llvm::Value *arg1) {
   PL_ASSERT(opcode != Opcode::undefined);
-  return InsertBytecodeInstruction(llvm_instruction, opcode, GetValueSlot(arg0), GetValueSlot(arg1));
+  return InsertBytecodeInstruction(llvm_instruction, opcode, GetValueSlot(arg0),
+                                   GetValueSlot(arg1));
 }
 
 ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
     UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
-    index_t call_context,
-    void *function) {
-
-  // calculate number of slots and assert it is 2 (this way we recognise if any size changes)
-  const size_t number_slots = (sizeof(ExternalCallInstruction) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
+    index_t call_context, void *function) {
+  // calculate number of slots and assert it is 2 (this way we recognise if any
+  // size changes)
+  const size_t number_slots =
+      (sizeof(ExternalCallInstruction) + sizeof(instr_slot_t) - 1) /
+      sizeof(instr_slot_t);
   PL_ASSERT(number_slots == 2);
 
-  instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
+  instr_slot_t &slot =
+      *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
 
-  ExternalCallInstruction instruction = {Opcode::call_external, call_context,
-                                 reinterpret_cast<void (*)(void)>(function)};
+  ExternalCallInstruction instruction = {
+      Opcode::call_external, call_context,
+      reinterpret_cast<void (*)(void)>(function)};
   *reinterpret_cast<ExternalCallInstruction *>(&slot) = instruction;
 
 #ifndef NDEBUG
-  context_.instruction_trace_.insert(context_.instruction_trace_.end(), number_slots, llvm_instruction);
+  context_.instruction_trace_.insert(context_.instruction_trace_.end(),
+                                     number_slots, llvm_instruction);
 #endif
 
-  return reinterpret_cast<ExternalCallInstruction &>(context_.bytecode_[context_.bytecode_.size() - number_slots]);
+  return reinterpret_cast<ExternalCallInstruction &>(
+      context_.bytecode_[context_.bytecode_.size() - number_slots]);
 }
 
-InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
-                                                                   index_t sub_context,
-                                                                   index_t dest_slot,
-                                                                   size_t number_arguments) {
+InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(
+    UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
+    index_t sub_context, index_t dest_slot, size_t number_arguments) {
   // calculate number of required instruction slots
-  const size_t number_slots = ((2 * (4 + number_arguments)) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
+  const size_t number_slots =
+      ((2 * (4 + number_arguments)) + sizeof(instr_slot_t) - 1) /
+      sizeof(instr_slot_t);
 
-  instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
-  InternalCallInstruction& instruction = *reinterpret_cast<InternalCallInstruction *>(&slot);
+  instr_slot_t &slot =
+      *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
+  InternalCallInstruction &instruction =
+      *reinterpret_cast<InternalCallInstruction *>(&slot);
   instruction.op = Opcode::call_internal;
   instruction.sub_context = sub_context;
   instruction.dest_slot = dest_slot;
   instruction.number_args = static_cast<index_t>(number_arguments);
 
-  PL_ASSERT(&instruction.args[number_arguments - 1] < reinterpret_cast<index_t *>(&context_.bytecode_.back() + 1));
+  PL_ASSERT(&instruction.args[number_arguments - 1] <
+            reinterpret_cast<index_t *>(&context_.bytecode_.back() + 1));
 
 #ifndef NDEBUG
-  context_.instruction_trace_.insert(context_.instruction_trace_.end(), number_slots, llvm_instruction);
+  context_.instruction_trace_.insert(context_.instruction_trace_.end(),
+                                     number_slots, llvm_instruction);
 #endif
 
   return reinterpret_cast<InternalCallInstruction &>(slot);
 }
 
-ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(const llvm::Value *alias, value_index_t value_index) {
+ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(
+    const llvm::Value *alias, value_index_t value_index) {
   PL_ASSERT(value_mapping_.find(alias) == value_mapping_.end());
   value_mapping_[alias] = value_index;
 
   return value_index;
 }
 
-ContextBuilder::value_index_t ContextBuilder::CreateValueIndex(const llvm::Value *value) {
+ContextBuilder::value_index_t ContextBuilder::CreateValueIndex(
+    const llvm::Value *value) {
   PL_ASSERT(value_mapping_.find(value) == value_mapping_.end());
 
   value_index_t value_index = value_liveliness_.size();
@@ -221,11 +244,11 @@ ContextBuilder::value_index_t ContextBuilder::CreateValueIndex(const llvm::Value
   return value_index;
 }
 
-ContextBuilder::value_index_t ContextBuilder::GetValueIndex(const llvm::Value *value) const {
+ContextBuilder::value_index_t ContextBuilder::GetValueIndex(
+    const llvm::Value *value) const {
   PL_ASSERT(value_mapping_.find(value) != value_mapping_.end());
   return value_mapping_.at(value);
 }
-
 
 value_t ContextBuilder::GetConstantValue(const llvm::Constant *constant) const {
   llvm::Type *type = constant->getType();
@@ -235,28 +258,30 @@ value_t ContextBuilder::GetConstantValue(const llvm::Constant *constant) const {
   } else {
     switch (type->getTypeID()) {
       case llvm::Type::IntegerTyID: {
-        int64_t value_signed = llvm::cast<llvm::ConstantInt>(constant)->getSExtValue();
+        int64_t value_signed =
+            llvm::cast<llvm::ConstantInt>(constant)->getSExtValue();
         return *reinterpret_cast<value_t *>(&value_signed);
       }
 
       case llvm::Type::FloatTyID: {
         float value_float = llvm::cast<llvm::ConstantFP>(constant)
-            ->getValueAPF()
-            .convertToFloat();
+                                ->getValueAPF()
+                                .convertToFloat();
         return *reinterpret_cast<value_t *>(&value_float);
       }
 
       case llvm::Type::DoubleTyID: {
         double value_double = llvm::cast<llvm::ConstantFP>(constant)
-            ->getValueAPF()
-            .convertToDouble();;
+                                  ->getValueAPF()
+                                  .convertToDouble();
+        ;
         return *reinterpret_cast<value_t *>(&value_double);
       }
 
       case llvm::Type::PointerTyID: {
         if (constant->getNumOperands() > 0) {
           if (auto *constant_int =
-              llvm::dyn_cast<llvm::ConstantInt>(constant->getOperand(0))) {
+                  llvm::dyn_cast<llvm::ConstantInt>(constant->getOperand(0))) {
             return reinterpret_cast<value_t>(constant_int->getZExtValue());
           }
         }
@@ -265,7 +290,8 @@ value_t ContextBuilder::GetConstantValue(const llvm::Constant *constant) const {
       }
 
       default:
-        throw NotSupportedException("unsupported constant type: " + CodeGen::Print(constant->getType()));
+        throw NotSupportedException("unsupported constant type: " +
+                                    CodeGen::Print(constant->getType()));
     }
   }
 }
@@ -282,9 +308,11 @@ ContextBuilder::value_index_t ContextBuilder::AddConstant(
   // We merge all constants that share the same value (not the type!)
 
   // Check if entry with this value already exists
-  auto constant_result = std::find_if( constants_.begin(), constants_.end(),
-                          [value](const std::pair<value_t, value_index_t>& item){ return item.first == value;} );
-
+  auto constant_result =
+      std::find_if(constants_.begin(), constants_.end(),
+                   [value](const std::pair<value_t, value_index_t> &item) {
+                     return item.first == value;
+                   });
 
   if (constant_result == constants_.end()) {
     // create new constant with that value
@@ -311,9 +339,10 @@ index_t ContextBuilder::GetValueSlot(const llvm::Value *value) const {
   return value_slots_[GetValueIndex(value)];
 }
 
-void ContextBuilder::AddValueDefinition(value_index_t value_index,
-                                   ContextBuilder::instruction_index_t definition) {
-  PL_ASSERT(value_liveliness_[value_index].definition == valueLivelinessUnknown);
+void ContextBuilder::AddValueDefinition(
+    value_index_t value_index, ContextBuilder::instruction_index_t definition) {
+  PL_ASSERT(value_liveliness_[value_index].definition ==
+            valueLivelinessUnknown);
   value_liveliness_[value_index].definition = definition;
 }
 
@@ -322,7 +351,8 @@ void ContextBuilder::AddValueUsage(value_index_t value_index,
   if (value_liveliness_[value_index].last_usage == valueLivelinessUnknown)
     value_liveliness_[value_index].last_usage = usage;
   else
-    value_liveliness_[value_index].last_usage = std::max(value_liveliness_[value_index].last_usage, usage);
+    value_liveliness_[value_index].last_usage =
+        std::max(value_liveliness_[value_index].last_usage, usage);
 }
 
 index_t ContextBuilder::GetTemporaryValueSlot(const llvm::BasicBlock *bb) {
@@ -332,7 +362,9 @@ index_t ContextBuilder::GetTemporaryValueSlot(const llvm::BasicBlock *bb) {
   // new entry in map is created automatically if necessary
   number_temporary_values_[bb]++;
 
-  number_temporary_value_slots_ = std::max(number_temporary_value_slots_, static_cast<size_t>(number_temporary_values_[bb]));
+  number_temporary_value_slots_ =
+      std::max(number_temporary_value_slots_,
+               static_cast<size_t>(number_temporary_values_[bb]));
   return number_value_slots_ + number_temporary_values_[bb] - 1;
 }
 
@@ -369,19 +401,23 @@ bool ContextBuilder::IsConstantValue(const llvm::Value *value) const {
   return (constant != nullptr);
 }
 
-int64_t ContextBuilder::GetConstantIntegerValueSigned(llvm::Value *constant) const {
+int64_t ContextBuilder::GetConstantIntegerValueSigned(
+    llvm::Value *constant) const {
   return llvm::cast<llvm::ConstantInt>(constant)->getSExtValue();
 }
 
-uint64_t ContextBuilder::GetConstantIntegerValueUnsigned(llvm::Value *constant) const {
+uint64_t ContextBuilder::GetConstantIntegerValueUnsigned(
+    llvm::Value *constant) const {
   return llvm::cast<llvm::ConstantInt>(constant)->getZExtValue();
 }
 
-bool ContextBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb, const llvm::BasicBlock *succ) const {
+bool ContextBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb,
+                                         const llvm::BasicBlock *succ) const {
   // walk the vector where we saved the basic block pointers in R
   // reverse post order (RPO)
   for (size_t i = 0; i < bb_reverse_post_order_.size() - 1; i++) {
-    if (bb_reverse_post_order_[i] == bb && bb_reverse_post_order_[i + 1] == succ)
+    if (bb_reverse_post_order_[i] == bb &&
+        bb_reverse_post_order_[i + 1] == succ)
       return true;
   }
 
@@ -389,7 +425,8 @@ bool ContextBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb, const llvm:
 }
 
 void ContextBuilder::AnalyseFunction() {
-  std::unordered_map<const llvm::BasicBlock *, index_t> bb_last_instruction_index;
+  std::unordered_map<const llvm::BasicBlock *, index_t>
+      bb_last_instruction_index;
 
   /* The analyse pass does:
    * - determine the liveliness of all values
@@ -402,7 +439,7 @@ void ContextBuilder::AnalyseFunction() {
 
   // Process function arguments
   for (auto &argument : llvm_function_->args()) {
-    value_index_t  value_index = CreateValueIndex(&argument);
+    value_index_t value_index = CreateValueIndex(&argument);
     // DEF: function arguments are already defines at function start
     AddValueDefinition(value_index, 0);
   }
@@ -411,7 +448,7 @@ void ContextBuilder::AnalyseFunction() {
   for (llvm::ReversePostOrderTraversal<const llvm::Function *>::rpo_iterator
            traversal_iterator = rpo_traversal_.begin();
        traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
-    const llvm::BasicBlock* bb = *traversal_iterator;
+    const llvm::BasicBlock *bb = *traversal_iterator;
 
     // Add basic block to rpo vector for pred/succ lookups
     bb_reverse_post_order_.push_back(bb);
@@ -426,26 +463,24 @@ void ContextBuilder::AnalyseFunction() {
       bool is_phi = false;
       bool is_non_zero_gep = false;
 
-      if (instruction->getOpcode() == llvm::Instruction::PHI)
-        is_phi = true;
+      if (instruction->getOpcode() == llvm::Instruction::PHI) is_phi = true;
       if (instruction->getOpcode() == llvm::Instruction::GetElementPtr &&
-          !llvm::cast<llvm::GetElementPtrInst>(instruction)->hasAllZeroIndices())
+          !llvm::cast<llvm::GetElementPtrInst>(instruction)
+               ->hasAllZeroIndices())
         is_non_zero_gep = true;
 
       // Exception 1: Skip the ExtractValue instructions we already
       // processed in Exception 6
-      if (instruction->getOpcode()
-          == llvm::Instruction::ExtractValue) {
+      if (instruction->getOpcode() == llvm::Instruction::ExtractValue) {
         auto *extractvalue_instruction =
             llvm::cast<llvm::ExtractValueInst>(instruction);
 
         // Check if this extract refers to a overflow call instruction
-        auto result =
-            overflow_results_mapping_.find(llvm::cast<llvm::CallInst>(
-                instruction->getOperand(0)));
+        auto result = overflow_results_mapping_.find(
+            llvm::cast<llvm::CallInst>(instruction->getOperand(0)));
         if (result != overflow_results_mapping_.end() &&
             (result->second.first == extractvalue_instruction ||
-                result->second.second == extractvalue_instruction)) {
+             result->second.second == extractvalue_instruction)) {
           continue;
         }
 
@@ -453,8 +488,8 @@ void ContextBuilder::AnalyseFunction() {
       }
 
       // USE: Iterate operands of instruction and extend their liveliness
-      for (llvm::Instruction::const_op_iterator
-               op_iterator = instruction->op_begin();
+      for (llvm::Instruction::const_op_iterator op_iterator =
+               instruction->op_begin();
            op_iterator != instruction->op_end(); ++op_iterator) {
         llvm::Value *operand = op_iterator->get();
 
@@ -463,32 +498,35 @@ void ContextBuilder::AnalyseFunction() {
           // Exception 2: the called function in a CallInst is also a constant
           // but we want to skip this one
           auto *call_instruction = llvm::dyn_cast<llvm::CallInst>(instruction);
-          if (call_instruction != nullptr
-              && call_instruction->getCalledFunction() == &*operand)
+          if (call_instruction != nullptr &&
+              call_instruction->getCalledFunction() == &*operand)
             continue;
 
           // Exception 3: constant operands from GEP and extractvalue are not
           // needed, as they get encoded in the instruction itself
-          if (instruction->getOpcode() == llvm::Instruction::GetElementPtr
-              || instruction->getOpcode() == llvm::Instruction::ExtractValue)
+          if (instruction->getOpcode() == llvm::Instruction::GetElementPtr ||
+              instruction->getOpcode() == llvm::Instruction::ExtractValue)
             continue;
 
           // Lookup value index for constant or create a new one if needed
-          value_index_t
-              value_index = AddConstant(llvm::cast<llvm::Constant>(operand));
+          value_index_t value_index =
+              AddConstant(llvm::cast<llvm::Constant>(operand));
 
           // USE: extend liveliness of constant value
           AddValueUsage(value_index, instruction_index);
 
-        // Exception 4: We extend the lifetime of GEP operands of GEPs
-        // that don't translate to nop by one, to make sure that the operands
-        // don't get overridden when we split the GEP into several instructions.
+          // Exception 4: We extend the lifetime of GEP operands of GEPs
+          // that don't translate to nop by one, to make sure that the operands
+          // don't get overridden when we split the GEP into several
+          // instructions.
         } else if (is_non_zero_gep) {
           value_index_t operand_index = GetValueIndex(operand);
-          AddValueUsage(operand_index, instruction_index + 1); // extended!
+          AddValueUsage(operand_index, instruction_index + 1);  // extended!
 
-        // A BasicBlock may be a label operand, but we don't need to track them
-        } else if (!is_phi && (llvm::dyn_cast<llvm::BasicBlock>(operand) == nullptr)) {
+          // A BasicBlock may be a label operand, but we don't need to track
+          // them
+        } else if (!is_phi &&
+                   (llvm::dyn_cast<llvm::BasicBlock>(operand) == nullptr)) {
           value_index_t operand_index = GetValueIndex(operand);
           AddValueUsage(operand_index, instruction_index);
         }
@@ -499,8 +537,9 @@ void ContextBuilder::AnalyseFunction() {
       if (instruction->getOpcode() == llvm::Instruction::BitCast ||
           instruction->getOpcode() == llvm::Instruction::Trunc ||
           instruction->getOpcode() == llvm::Instruction::PtrToInt ||
-          (instruction->getOpcode() == llvm::Instruction::GetElementPtr
-              && llvm::cast<llvm::GetElementPtrInst>(instruction)->hasAllZeroIndices())) {
+          (instruction->getOpcode() == llvm::Instruction::GetElementPtr &&
+           llvm::cast<llvm::GetElementPtrInst>(instruction)
+               ->hasAllZeroIndices())) {
         // merge operand resulting value
         CreateValueAlias(instruction,
                          GetValueIndex(instruction->getOperand(0)));
@@ -519,42 +558,39 @@ void ContextBuilder::AnalyseFunction() {
         if (function->isDeclaration()) {
           std::string function_name = function->getName().str();
 
-          if (function_name.size() >= 14
-              && function_name.substr(10, 13) == "with.overflow") {
-
+          if (function_name.size() >= 14 &&
+              function_name.substr(10, 13) == "with.overflow") {
             // create entry for this call
             overflow_results_mapping_[call_instruction] =
                 std::make_pair(nullptr, nullptr);
 
             // Find the first ExtractValue instruction referring to this call
             // instruction for result and overflow each and put it in the
-            // value_liveliness vector here. The liveliness of those instructions
+            // value_liveliness vector here. The liveliness of those
+            // instructions
             // has to be extended to the definition of the call instruction,
             // and this way we ensure that the vector is sorted by .definition
             // and we avoid sorting it later.
             for (auto *user : call_instruction->users()) {
-              auto
-                  *extract_instruction =
+              auto *extract_instruction =
                   llvm::cast<llvm::ExtractValueInst>(user);
               size_t extract_index = *extract_instruction->idx_begin();
 
               if (extract_index == 0) {
-                PL_ASSERT(
-                    overflow_results_mapping_[call_instruction].first
-                        == nullptr);
+                PL_ASSERT(overflow_results_mapping_[call_instruction].first ==
+                          nullptr);
                 overflow_results_mapping_[call_instruction].first =
                     extract_instruction;
 
               } else if (extract_index == 1) {
-                PL_ASSERT(overflow_results_mapping_[call_instruction].second
-                              == nullptr);
+                PL_ASSERT(overflow_results_mapping_[call_instruction].second ==
+                          nullptr);
                 overflow_results_mapping_[call_instruction].second =
                     extract_instruction;
-
               }
 
-              value_index_t
-                  extract_value_index = CreateValueIndex(extract_instruction);
+              value_index_t extract_value_index =
+                  CreateValueIndex(extract_instruction);
               AddValueDefinition(extract_value_index, instruction_index);
             }
 
@@ -587,17 +623,20 @@ void ContextBuilder::AnalyseFunction() {
        traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
     const llvm::BasicBlock *bb = *traversal_iterator;
     for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin();
-         auto *phi_instruction = llvm::dyn_cast<llvm::PHINode>(&*instr_iterator); ++instr_iterator) {
-
-      for (llvm::PHINode::const_block_iterator op_iterator = phi_instruction->block_begin();
+         auto *phi_instruction =
+             llvm::dyn_cast<llvm::PHINode>(&*instr_iterator);
+         ++instr_iterator) {
+      for (llvm::PHINode::const_block_iterator op_iterator =
+               phi_instruction->block_begin();
            op_iterator != phi_instruction->block_end(); ++op_iterator) {
         llvm::BasicBlock *phi_bb = *op_iterator;
-        llvm::Value *phi_value = phi_instruction->getIncomingValueForBlock(phi_bb);
+        llvm::Value *phi_value =
+            phi_instruction->getIncomingValueForBlock(phi_bb);
 
-        if (IsConstantValue(phi_value))
-          continue;
+        if (IsConstantValue(phi_value)) continue;
 
-        AddValueUsage(GetValueIndex(phi_value), bb_last_instruction_index[phi_bb]);
+        AddValueUsage(GetValueIndex(phi_value),
+                      bb_last_instruction_index[phi_bb]);
       }
     }
   }
@@ -616,10 +655,9 @@ void ContextBuilder::PerformNaiveRegisterAllocation() {
   // iterate over other entries, which are already sorted
   for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
     // skip values that start at zero or that are never used
-    if (value_liveliness_[i].last_usage == valueLivelinessUnknown)
-      continue;
+    if (value_liveliness_[i].last_usage == valueLivelinessUnknown) continue;
 
-    value_slots_[i] = reg++ + 1; // + 1 because 0 is dummy slot
+    value_slots_[i] = reg++ + 1;  // + 1 because 0 is dummy slot
   }
 
   number_value_slots_ = reg + 1;
@@ -654,9 +692,11 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
 
   // get all entries with .definition = 0
   for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
-    if (value_liveliness_[i].definition == 0 && value_liveliness_[i].last_usage != valueLivelinessUnknown) {
+    if (value_liveliness_[i].definition == 0 &&
+        value_liveliness_[i].last_usage != valueLivelinessUnknown) {
       registers.push_back(value_liveliness_[i]);
-      value_slots_[i] = registers.size() - 1 + 1; // + 1 because 0 is dummy slot
+      value_slots_[i] =
+          registers.size() - 1 + 1;  // + 1 because 0 is dummy slot
     }
   }
 
@@ -669,7 +709,8 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
   // iterate over other entries, which are already sorted
   for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
     // skip values that start at zero or that are never used
-    if (value_liveliness_[i].definition == 0 || value_liveliness_[i].last_usage == valueLivelinessUnknown)
+    if (value_liveliness_[i].definition == 0 ||
+        value_liveliness_[i].last_usage == valueLivelinessUnknown)
       continue;
 
 #ifndef NDEBUG
@@ -677,22 +718,24 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
     instruction_index = value_liveliness_[i].definition;
 #endif
 
-    value_slots_[i] = findEmptyRegister(value_liveliness_[i]) + 1; // + 1 because 0 is dummy slot
+    value_slots_[i] = findEmptyRegister(value_liveliness_[i]) +
+                      1;  // + 1 because 0 is dummy slot
   }
 
-  number_value_slots_ = registers.size() + 1; // + 1 because 0 is dummy slot
+  number_value_slots_ = registers.size() + 1;  // + 1 because 0 is dummy slot
 }
 
 void ContextBuilder::ValidateRegisterMapping() {
   // array [slots][time] that simply tracks if a slots if occupied at a time
-  std::vector<bool> slot_occupied(number_value_slots_ * instruction_index_max_, false);
+  std::vector<bool> slot_occupied(number_value_slots_ * instruction_index_max_,
+                                  false);
 
   // define a setter and a getter for the array
-  auto get = [&slot_occupied, this] (index_t slot, instruction_index_t time) {
+  auto get = [&slot_occupied, this](index_t slot, instruction_index_t time) {
     return slot_occupied[number_value_slots_ * time + slot];
   };
 
-  auto set = [&slot_occupied, this] (index_t slot, instruction_index_t time) {
+  auto set = [&slot_occupied, this](index_t slot, instruction_index_t time) {
     slot_occupied[number_value_slots_ * time + slot] = true;
   };
 
@@ -701,10 +744,10 @@ void ContextBuilder::ValidateRegisterMapping() {
   // iterate over all livetimes and out them in the array
   for (size_t i = 0; i < value_liveliness_.size(); i++) {
     index_t slot = value_slots_[i];
-    if (slot == 0)
-      continue;
+    if (slot == 0) continue;
 
-    for (instruction_index_t time = value_liveliness_[i].definition; time < value_liveliness_[i].last_usage; time++) {
+    for (instruction_index_t time = value_liveliness_[i].definition;
+         time < value_liveliness_[i].last_usage; time++) {
       // check if the range in this register is not occupied by anyone else
       if (get(slot, time) != false)
         throw Exception("register mapping is inavlid");
@@ -740,7 +783,8 @@ std::string ContextBuilder::DumpValueInformation() {
          instr_iterator != bb->end(); ++instr_iterator, ++instruction_index) {
       const llvm::Instruction *instruction = instr_iterator;
 
-      output += std::to_string(instruction_index) + ";" + CodeGen::Print(instruction) + ";";
+      output += std::to_string(instruction_index) + ";" +
+                CodeGen::Print(instruction) + ";";
 
       // for every value index, print if its live or not
       for (size_t i = 0; i < value_liveliness_.size(); i++) {
@@ -824,13 +868,14 @@ void ContextBuilder::TranslateFunction() {
   for (llvm::ReversePostOrderTraversal<const llvm::Function *>::rpo_iterator
            traversal_iterator = rpo_traversal_.begin();
        traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
-    const llvm::BasicBlock* bb = *traversal_iterator;
+    const llvm::BasicBlock *bb = *traversal_iterator;
 
     // add basic block mapping
     bb_mapping[bb] = context_.bytecode_.size();
 
     // Interate all instruction in the basic block
-    for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin(); instr_iterator != bb->end(); ++instr_iterator) {
+    for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin();
+         instr_iterator != bb->end(); ++instr_iterator) {
       const llvm::Instruction *instruction = instr_iterator;
 
       // Dispatch to the respective translator function
@@ -846,8 +891,8 @@ void ContextBuilder::TranslateFunction() {
           TranslateReturn(instruction);
           break;
 
-          // Standard binary operators
-          // Logical operators
+        // Standard binary operators
+        // Logical operators
         case llvm::Instruction::Add:
         case llvm::Instruction::Sub:
         case llvm::Instruction::Mul:
@@ -869,7 +914,7 @@ void ContextBuilder::TranslateFunction() {
           TranslateBinaryOperator(instruction);
           break;
 
-          // Memory instructions
+        // Memory instructions
         case llvm::Instruction::Load:
           TranslateLoad(instruction);
           break;
@@ -886,7 +931,7 @@ void ContextBuilder::TranslateFunction() {
           TranslateGetElementPtr(instruction);
           break;
 
-          // Cast instructions
+        // Cast instructions
         case llvm::Instruction::BitCast:
           // bit casts translate to nop
           // values got already merged in analysis pass
@@ -911,7 +956,7 @@ void ContextBuilder::TranslateFunction() {
           TranslateFloatIntCast(instruction);
           break;
 
-          // Other instructions
+        // Other instructions
         case llvm::Instruction::ICmp:
         case llvm::Instruction::FCmp:
           TranslateCmp(instruction);
@@ -937,17 +982,17 @@ void ContextBuilder::TranslateFunction() {
           // nop
           break;
 
-          // Instruction is not supported
-        default: {
-          throw NotSupportedException("instruction not supported");
-        }
+        // Instruction is not supported
+        default: { throw NotSupportedException("instruction not supported"); }
       }
     }
   }
 
   // apply the relocations required by the placed branch instructions
   for (auto &relocation : bytecode_relocations) {
-    reinterpret_cast<Instruction *>(&context_.bytecode_[relocation.instruction_slot])->args[relocation.argument] = bb_mapping[relocation.bb];
+    reinterpret_cast<Instruction *>(
+        &context_.bytecode_[relocation.instruction_slot])
+        ->args[relocation.argument] = bb_mapping[relocation.bb];
   }
 }
 
@@ -963,7 +1008,8 @@ void ContextBuilder::Finalize() {
   // prepare constants for context
   context_.constants_.resize(constants_.size());
   for (size_t i = 0; i < constants_.size(); ++i) {
-    context_.constants_[i] = std::make_pair(constants_[i].first, GetValueSlot(constants_[i].second));
+    context_.constants_[i] =
+        std::make_pair(constants_[i].first, GetValueSlot(constants_[i].second));
   }
 
   // prepare arguments for context
@@ -985,49 +1031,53 @@ void ContextBuilder::ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb) {
   // applied after all PHI nodes have been processed.
   std::vector<AdditionalMove> additional_moves;
 
-  for (auto succ_iterator = llvm::succ_begin(bb); succ_iterator != llvm::succ_end(bb); ++succ_iterator) {
+  for (auto succ_iterator = llvm::succ_begin(bb);
+       succ_iterator != llvm::succ_end(bb); ++succ_iterator) {
     // If the basic block is its own successor, we take risk to run into the PHI
     // swap problem (lost copy problem). To avoid this, we move the values in
     // temporary registers and move them to their destination after processing
     // all other PHI nodes.
     if (*succ_iterator == bb) {
-      for (auto instruction_iterator = succ_iterator->begin(); auto *phi_node = llvm::dyn_cast<llvm::PHINode>(&*instruction_iterator); ++instruction_iterator) {
+      for (auto instruction_iterator = succ_iterator->begin();
+           auto *phi_node =
+               llvm::dyn_cast<llvm::PHINode>(&*instruction_iterator);
+           ++instruction_iterator) {
         index_t temp_slot = GetTemporaryValueSlot(bb);
 
-        InsertBytecodeInstruction(phi_node,
-                                  Opcode::phi_mov,
-                                  temp_slot,
-                                  GetValueSlot(phi_node->getIncomingValueForBlock(
-                                      bb)));
-        additional_moves.push_back({phi_node, GetValueSlot(phi_node), temp_slot});
+        InsertBytecodeInstruction(
+            phi_node, Opcode::phi_mov, temp_slot,
+            GetValueSlot(phi_node->getIncomingValueForBlock(bb)));
+        additional_moves.push_back(
+            {phi_node, GetValueSlot(phi_node), temp_slot});
       }
 
-    // Common case: create mov instruction to destination slot
+      // Common case: create mov instruction to destination slot
     } else {
-      for (auto instruction_iterator = succ_iterator->begin(); auto *phi_node = llvm::dyn_cast<llvm::PHINode>(&*instruction_iterator); ++instruction_iterator) {
-        if (GetValueSlot(phi_node) == GetValueSlot(phi_node->getIncomingValueForBlock(
-            bb)))
+      for (auto instruction_iterator = succ_iterator->begin();
+           auto *phi_node =
+               llvm::dyn_cast<llvm::PHINode>(&*instruction_iterator);
+           ++instruction_iterator) {
+        if (GetValueSlot(phi_node) ==
+            GetValueSlot(phi_node->getIncomingValueForBlock(bb)))
           continue;
 
-        InsertBytecodeInstruction(phi_node,
-                                  Opcode::phi_mov,
-                                  GetValueSlot(phi_node),
-                                  GetValueSlot(phi_node->getIncomingValueForBlock(
-                                      bb)));
+        InsertBytecodeInstruction(
+            phi_node, Opcode::phi_mov, GetValueSlot(phi_node),
+            GetValueSlot(phi_node->getIncomingValueForBlock(bb)));
       }
     }
   }
 
   // Place additional moves if needed
   for (auto &entry : additional_moves) {
-    InsertBytecodeInstruction(entry.instruction,
-                              Opcode::phi_mov,
-                              entry.dest,
+    InsertBytecodeInstruction(entry.instruction, Opcode::phi_mov, entry.dest,
                               entry.src);
   }
 }
 
-void ContextBuilder::TranslateBranch(const llvm::Instruction *instruction, std::vector<BytecodeRelocation> &bytecode_relocations) {
+void ContextBuilder::TranslateBranch(
+    const llvm::Instruction *instruction,
+    std::vector<BytecodeRelocation> &bytecode_relocations) {
   auto *branch_instruction = llvm::cast<llvm::BranchInst>(&*instruction);
 
   // conditional branch
@@ -1038,56 +1088,56 @@ void ContextBuilder::TranslateBranch(const llvm::Instruction *instruction, std::
     // in our bytecode.
 
     // If false branch is next basic block, we can use a fall through branch
-    if (BasicBlockIsRPOSucc(branch_instruction->getParent(), llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(1)))) {
-      InsertBytecodeInstruction(instruction,
-                                Opcode::branch_cond_ft,
-                                GetValueSlot(branch_instruction->getOperand(0)), 0);
+    if (BasicBlockIsRPOSucc(
+            branch_instruction->getParent(),
+            llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(1)))) {
+      InsertBytecodeInstruction(instruction, Opcode::branch_cond_ft,
+                                GetValueSlot(branch_instruction->getOperand(0)),
+                                0);
 
-      BytecodeRelocation relocation_false{static_cast<index_t>(context_.bytecode_.size() - 1),
-                                          1,
-                                          llvm::cast<llvm::BasicBlock>(
-                                              branch_instruction->getOperand(2))};
+      BytecodeRelocation relocation_false{
+          static_cast<index_t>(context_.bytecode_.size() - 1), 1,
+          llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(2))};
 
       // add relocation entry, to insert missing information of destination
       // later
       bytecode_relocations.push_back(relocation_false);
 
-    // no fall through
+      // no fall through
     } else {
-      InsertBytecodeInstruction(instruction,
-                                Opcode::branch_cond,
-                                GetValueSlot(branch_instruction->getOperand(0)), 0, 0);
+      InsertBytecodeInstruction(instruction, Opcode::branch_cond,
+                                GetValueSlot(branch_instruction->getOperand(0)),
+                                0, 0);
 
-      BytecodeRelocation relocation_false{static_cast<index_t>(context_.bytecode_.size() - 1),
-                                          1,
-                                          llvm::cast<llvm::BasicBlock>(
-                                              branch_instruction->getOperand(1))};
+      BytecodeRelocation relocation_false{
+          static_cast<index_t>(context_.bytecode_.size() - 1), 1,
+          llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(1))};
 
       // add relocation entry, to insert missing information of destination
       // later
       bytecode_relocations.push_back(relocation_false);
 
-      BytecodeRelocation relocation_true{static_cast<index_t>(context_.bytecode_.size() - 1),
-                                         2,
-                                         llvm::cast<llvm::BasicBlock>(
-                                             branch_instruction->getOperand(2))};
+      BytecodeRelocation relocation_true{
+          static_cast<index_t>(context_.bytecode_.size() - 1), 2,
+          llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(2))};
 
       // add relocation entry, to insert missing information of destination
       // later
       bytecode_relocations.push_back(relocation_true);
     }
 
-  // unconditional branch
+    // unconditional branch
   } else {
     // If the unconditional branch points to the next basic block,
     // we can omit the branch instruction
-    if (!BasicBlockIsRPOSucc(branch_instruction->getParent(), llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(0)))) {
+    if (!BasicBlockIsRPOSucc(
+            branch_instruction->getParent(),
+            llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(0)))) {
       InsertBytecodeInstruction(instruction, Opcode::branch_uncond, 0);
 
-      BytecodeRelocation relocation{static_cast<index_t>(context_.bytecode_.size() - 1),
-                                    0,
-                                    llvm::cast<llvm::BasicBlock>(
-                                        branch_instruction->getOperand(0))};
+      BytecodeRelocation relocation{
+          static_cast<index_t>(context_.bytecode_.size() - 1), 0,
+          llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(0))};
 
       // add relocation entry, to insert missing information of destination
       // later
@@ -1110,7 +1160,8 @@ void ContextBuilder::TranslateReturn(const llvm::Instruction *instruction) {
   InsertBytecodeInstruction(instruction, Opcode::ret, return_slot);
 }
 
-void ContextBuilder::TranslateBinaryOperator(const llvm::Instruction *instruction) {
+void ContextBuilder::TranslateBinaryOperator(
+    const llvm::Instruction *instruction) {
   auto *binary_operator = llvm::cast<llvm::BinaryOperator>(&*instruction);
   auto *type = binary_operator->getType();
   Opcode opcode;
@@ -1137,19 +1188,23 @@ void ContextBuilder::TranslateBinaryOperator(const llvm::Instruction *instructio
       break;
 
     case llvm::Instruction::SDiv:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sdiv), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sdiv), type);
       break;
 
     case llvm::Instruction::URem:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::urem), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::urem), type);
       break;
 
     case llvm::Instruction::FRem:
-      opcode = GetOpcodeForTypeFloatTypes(GET_FIRST_FLOAT_TYPES(Opcode::frem), type);
+      opcode =
+          GetOpcodeForTypeFloatTypes(GET_FIRST_FLOAT_TYPES(Opcode::frem), type);
       break;
 
     case llvm::Instruction::SRem:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::srem), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::srem), type);
       break;
 
     case llvm::Instruction::Shl:
@@ -1157,11 +1212,13 @@ void ContextBuilder::TranslateBinaryOperator(const llvm::Instruction *instructio
       break;
 
     case llvm::Instruction::LShr:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::lshr), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::lshr), type);
       break;
 
     case llvm::Instruction::AShr:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::ashr), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::ashr), type);
       break;
 
     case llvm::Instruction::And:
@@ -1169,20 +1226,19 @@ void ContextBuilder::TranslateBinaryOperator(const llvm::Instruction *instructio
       break;
 
     case llvm::Instruction::Or:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::or), type);
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode:: or), type);
       break;
 
     case llvm::Instruction::Xor:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::xor), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode:: xor), type);
       break;
 
     default:
       throw NotSupportedException("binary operation not supported");
   }
 
-  InsertBytecodeInstruction(instruction,
-                            opcode,
-                            binary_operator,
+  InsertBytecodeInstruction(instruction, opcode, binary_operator,
                             binary_operator->getOperand(0),
                             binary_operator->getOperand(1));
 }
@@ -1199,13 +1255,14 @@ void ContextBuilder::TranslateAlloca(const llvm::Instruction *instruction) {
 
   if (alloca_instruction->isArrayAllocation()) {
     index_t array_size = GetValueSlot(alloca_instruction->getArraySize());
-    opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::alloca_array), alloca_instruction->getArraySize()->getType());
+    opcode =
+        GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::alloca_array),
+                                 alloca_instruction->getArraySize()->getType());
 
     // type size is immediate value!
     InsertBytecodeInstruction(instruction, opcode,
                               GetValueSlot(alloca_instruction),
-                              static_cast<index_t>(type_size),
-                              array_size);
+                              static_cast<index_t>(type_size), array_size);
   } else {
     opcode = Opcode::alloca;
     // type size is immediate value!
@@ -1218,41 +1275,38 @@ void ContextBuilder::TranslateAlloca(const llvm::Instruction *instruction) {
 void ContextBuilder::TranslateLoad(const llvm::Instruction *instruction) {
   auto *load_instruction = llvm::cast<llvm::LoadInst>(&*instruction);
 
-  Opcode opcode = GetOpcodeForTypeSizeIntTypes(GET_FIRST_INT_TYPES(Opcode::load), load_instruction->getType());
-  InsertBytecodeInstruction(instruction,
-                            opcode,
-                            load_instruction,
+  Opcode opcode = GetOpcodeForTypeSizeIntTypes(
+      GET_FIRST_INT_TYPES(Opcode::load), load_instruction->getType());
+  InsertBytecodeInstruction(instruction, opcode, load_instruction,
                             load_instruction->getPointerOperand());
 }
 
 void ContextBuilder::TranslateStore(const llvm::Instruction *instruction) {
   auto *store_instruction = llvm::cast<llvm::StoreInst>(&*instruction);
 
-  Opcode opcode = GetOpcodeForTypeSizeIntTypes(GET_FIRST_INT_TYPES(Opcode::store), store_instruction->getOperand(0)->getType());
-  InsertBytecodeInstruction(instruction,
-                            opcode,
+  Opcode opcode =
+      GetOpcodeForTypeSizeIntTypes(GET_FIRST_INT_TYPES(Opcode::store),
+                                   store_instruction->getOperand(0)->getType());
+  InsertBytecodeInstruction(instruction, opcode,
                             store_instruction->getPointerOperand(),
                             store_instruction->getValueOperand());
 }
 
-void ContextBuilder::TranslateGetElementPtr(const llvm::Instruction *instruction) {
+void ContextBuilder::TranslateGetElementPtr(
+    const llvm::Instruction *instruction) {
   auto *gep_instruction = llvm::cast<llvm::GetElementPtrInst>(&*instruction);
   int64_t overall_offset = 0;
 
   // If the GEP translates to a nop, the values have been already merged
   // during the analysis pass
-  if (gep_instruction->hasAllZeroIndices())
-    return;
+  if (gep_instruction->hasAllZeroIndices()) return;
 
   // The offset is an immediate constant, not a slot index
   // instruction is created here, but offset will be filled in later,
   // because we may merge it with constant array accesses
   auto &gep_offset_bytecode_instruction = InsertBytecodeInstruction(
-      gep_instruction,
-      Opcode::gep_offset,
-      GetValueSlot(gep_instruction),
-      GetValueSlot(gep_instruction->getPointerOperand()),
-      0);
+      gep_instruction, Opcode::gep_offset, GetValueSlot(gep_instruction),
+      GetValueSlot(gep_instruction->getPointerOperand()), 0);
 
   // First index operand of the instruction is the array index for the
   // source type
@@ -1261,18 +1315,19 @@ void ContextBuilder::TranslateGetElementPtr(const llvm::Instruction *instruction
   llvm::Type *type = gep_instruction->getSourceElementType();
 
   if (IsConstantValue(gep_instruction->getOperand(1))) {
-    overall_offset += code_context_.GetTypeSize(type) * GetConstantIntegerValueSigned(gep_instruction->getOperand(1));
+    overall_offset +=
+        code_context_.GetTypeSize(type) *
+        GetConstantIntegerValueSigned(gep_instruction->getOperand(1));
   } else {
     index_t index = GetValueSlot(instruction->getOperand(1));
-    Opcode opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::gep_array), instruction->getOperand(1)->getType());
+    Opcode opcode =
+        GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::gep_array),
+                                 instruction->getOperand(1)->getType());
 
     // size of array element is an immediate constant, not a slot index!
-    InsertBytecodeInstruction(gep_instruction,
-                              opcode,
-                              GetValueSlot(gep_instruction),
-                              index,
-                              static_cast<index_t>(code_context_.GetTypeSize(
-                                  type)));
+    InsertBytecodeInstruction(
+        gep_instruction, opcode, GetValueSlot(gep_instruction), index,
+        static_cast<index_t>(code_context_.GetTypeSize(type)));
   }
 
   // Iterate remaining Indexes
@@ -1282,19 +1337,19 @@ void ContextBuilder::TranslateGetElementPtr(const llvm::Instruction *instruction
 
     if (auto *array_type = llvm::dyn_cast<llvm::ArrayType>(type)) {
       if (IsConstantValue(operand)) {
-        overall_offset += code_context_.GetTypeSize(array_type->getElementType()) * GetConstantIntegerValueSigned(operand);
+        overall_offset +=
+            code_context_.GetTypeSize(array_type->getElementType()) *
+            GetConstantIntegerValueSigned(operand);
       } else {
         index_t index = GetValueSlot(operand);
-        Opcode opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::gep_array),
-                                                 operand->getType());
+        Opcode opcode = GetOpcodeForTypeIntTypes(
+            GET_FIRST_INT_TYPES(Opcode::gep_array), operand->getType());
 
         // size of array element is an immediate constant, not a slot index!
-        InsertBytecodeInstruction(gep_instruction,
-                                  opcode,
-                                  GetValueSlot(gep_instruction),
-                                  index,
-                                  static_cast<index_t>(code_context_.GetTypeSize(
-                                      array_type->getElementType())));
+        InsertBytecodeInstruction(
+            gep_instruction, opcode, GetValueSlot(gep_instruction), index,
+            static_cast<index_t>(
+                code_context_.GetTypeSize(array_type->getElementType())));
       }
 
       // get inner type for next iteration
@@ -1318,7 +1373,8 @@ void ContextBuilder::TranslateGetElementPtr(const llvm::Instruction *instruction
       type = struct_type->getElementType(index);
 
     } else {
-      throw NotSupportedException("unexpected type in getelementptr instruction");
+      throw NotSupportedException(
+          "unexpected type in getelementptr instruction");
     }
   }
 
@@ -1327,10 +1383,12 @@ void ContextBuilder::TranslateGetElementPtr(const llvm::Instruction *instruction
 
   // fill in calculated overall offset in previously placed gep_offset
   // bytecode instruction
-  gep_offset_bytecode_instruction.args[2] = static_cast<index_t>(overall_offset);
+  gep_offset_bytecode_instruction.args[2] =
+      static_cast<index_t>(overall_offset);
 }
 
-void ContextBuilder::TranslateFloatIntCast(const llvm::Instruction *instruction) {
+void ContextBuilder::TranslateFloatIntCast(
+    const llvm::Instruction *instruction) {
   auto *cast_instruction = llvm::dyn_cast<llvm::CastInst>(&*instruction);
 
   // These instruction basically exist from every integer type to every
@@ -1343,33 +1401,47 @@ void ContextBuilder::TranslateFloatIntCast(const llvm::Instruction *instruction)
 
   if (instruction->getOpcode() == llvm::Instruction::FPToSI) {
     if (cast_instruction->getOperand(0)->getType() == code_context_.float_type_)
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::floattosi), cast_instruction->getType());
-    else if (cast_instruction->getOperand(0)->getType() == code_context_.double_type_)
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletosi), cast_instruction->getType());
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::floattosi),
+                                        cast_instruction->getType());
+    else if (cast_instruction->getOperand(0)->getType() ==
+             code_context_.double_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletosi),
+                                        cast_instruction->getType());
     else
       throw NotSupportedException("unsupported cast instruction");
 
   } else if (instruction->getOpcode() == llvm::Instruction::FPToUI) {
     if (cast_instruction->getOperand(0)->getType() == code_context_.float_type_)
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::floattoui), cast_instruction->getType());
-    else if (cast_instruction->getOperand(0)->getType() == code_context_.double_type_)
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletoui), cast_instruction->getType());
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::floattoui),
+                                        cast_instruction->getType());
+    else if (cast_instruction->getOperand(0)->getType() ==
+             code_context_.double_type_)
+      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::doubletoui),
+                                        cast_instruction->getType());
     else
       throw NotSupportedException("unsupported cast instruction");
 
   } else if (instruction->getOpcode() == llvm::Instruction::SIToFP) {
     if (cast_instruction->getType() == code_context_.float_type_)
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sitofloat), cast_instruction->getOperand(0)->getType());
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sitofloat),
+                                   cast_instruction->getOperand(0)->getType());
     else if (cast_instruction->getType() == code_context_.double_type_)
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sitodouble), cast_instruction->getOperand(0)->getType());
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::sitodouble),
+                                   cast_instruction->getOperand(0)->getType());
     else
       throw NotSupportedException("unsupported cast instruction");
 
   } else if (instruction->getOpcode() == llvm::Instruction::UIToFP) {
     if (cast_instruction->getType() == code_context_.float_type_)
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::uitofloat), cast_instruction->getOperand(0)->getType());
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::uitofloat),
+                                   cast_instruction->getOperand(0)->getType());
     else if (cast_instruction->getType() == code_context_.double_type_)
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::uitodouble), cast_instruction->getOperand(0)->getType());
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::uitodouble),
+                                   cast_instruction->getOperand(0)->getType());
     else
       throw NotSupportedException("unsupported cast instruction");
 
@@ -1377,18 +1449,22 @@ void ContextBuilder::TranslateFloatIntCast(const llvm::Instruction *instruction)
     throw NotSupportedException("unsupported cast instruction");
   }
 
-  InsertBytecodeInstruction(cast_instruction, opcode, cast_instruction, cast_instruction->getOperand(0));
+  InsertBytecodeInstruction(cast_instruction, opcode, cast_instruction,
+                            cast_instruction->getOperand(0));
 }
 
 void ContextBuilder::TranslateIntExt(const llvm::Instruction *instruction) {
   auto *cast_instruction = llvm::dyn_cast<llvm::CastInst>(&*instruction);
 
-  size_t src_type_size = code_context_.GetTypeSize(cast_instruction->getSrcTy());
-  size_t dest_type_size = code_context_.GetTypeSize(cast_instruction->getDestTy());
+  size_t src_type_size =
+      code_context_.GetTypeSize(cast_instruction->getSrcTy());
+  size_t dest_type_size =
+      code_context_.GetTypeSize(cast_instruction->getDestTy());
 
   if (src_type_size == dest_type_size) {
     if (GetValueSlot(instruction) != GetValueSlot(instruction->getOperand(0)))
-      InsertBytecodeInstruction(instruction, Opcode::nop_mov, instruction, instruction->getOperand(0));
+      InsertBytecodeInstruction(instruction, Opcode::nop_mov, instruction,
+                                instruction->getOperand(0));
     return;
   }
 
@@ -1412,7 +1488,7 @@ void ContextBuilder::TranslateIntExt(const llvm::Instruction *instruction) {
     }
 
   } else if (instruction->getOpcode() == llvm::Instruction::ZExt ||
-      instruction->getOpcode() == llvm::Instruction::IntToPtr) {
+             instruction->getOpcode() == llvm::Instruction::IntToPtr) {
     if (src_type_size == 1 && dest_type_size == 2) {
       opcode = Opcode::zext_i8_i16;
     } else if (src_type_size == 1 && dest_type_size == 4) {
@@ -1433,7 +1509,8 @@ void ContextBuilder::TranslateIntExt(const llvm::Instruction *instruction) {
     throw NotSupportedException("unexpected ext instruction");
   }
 
-  InsertBytecodeInstruction(cast_instruction, opcode, cast_instruction, cast_instruction->getOperand(0));
+  InsertBytecodeInstruction(cast_instruction, opcode, cast_instruction,
+                            cast_instruction->getOperand(0));
 }
 
 void ContextBuilder::TranslateCmp(const llvm::Instruction *instruction) {
@@ -1445,63 +1522,70 @@ void ContextBuilder::TranslateCmp(const llvm::Instruction *instruction) {
     case llvm::CmpInst::Predicate::ICMP_EQ:
     case llvm::CmpInst::Predicate::FCMP_OEQ:
     case llvm::CmpInst::Predicate::FCMP_UEQ:
-      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_eq), type);
+      opcode =
+          GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_eq), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_NE:
     case llvm::CmpInst::Predicate::FCMP_ONE:
     case llvm::CmpInst::Predicate::FCMP_UNE:
-      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_ne), type);
+      opcode =
+          GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_ne), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_UGT:
     case llvm::CmpInst::Predicate::FCMP_OGT:
     case llvm::CmpInst::Predicate::FCMP_UGT:
-      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_gt), type);
+      opcode =
+          GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_gt), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_UGE:
     case llvm::CmpInst::Predicate::FCMP_OGE:
     case llvm::CmpInst::Predicate::FCMP_UGE:
-      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_ge), type);
+      opcode =
+          GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_ge), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_ULT:
     case llvm::CmpInst::Predicate::FCMP_OLT:
     case llvm::CmpInst::Predicate::FCMP_ULT:
-      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_lt), type);
+      opcode =
+          GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_lt), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_ULE:
     case llvm::CmpInst::Predicate::FCMP_OLE:
     case llvm::CmpInst::Predicate::FCMP_ULE:
-      opcode = GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_le), type);
+      opcode =
+          GetOpcodeForTypeAllTypes(GET_FIRST_ALL_TYPES(Opcode::cmp_le), type);
       break;
 
-
     case llvm::CmpInst::Predicate::ICMP_SGT:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_sgt), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_sgt), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_SGE:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_sge), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_sge), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_SLT:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_slt), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_slt), type);
       break;
 
     case llvm::CmpInst::Predicate::ICMP_SLE:
-      opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_sle), type);
+      opcode =
+          GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::cmp_sle), type);
       break;
 
     default:
       throw NotSupportedException("compare operand not supported");
   }
 
-  InsertBytecodeInstruction(cmp_instruction,
-                            opcode,
-                            cmp_instruction,
+  InsertBytecodeInstruction(cmp_instruction, opcode, cmp_instruction,
                             cmp_instruction->getOperand(0),
                             cmp_instruction->getOperand(1));
 }
@@ -1516,78 +1600,97 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
     // intrinsic) is to check the function name string
     std::string function_name = function->getName().str();
 
-    if (function_name.size() >= 12 && function_name.substr(0, 11) == "llvm.memcpy") {
-      if (call_instruction->getOperand(2)->getType() != code_context_.int64_type_)
-        throw NotSupportedException("memcpy with different size type than i64 not supported");
+    if (function_name.size() >= 12 &&
+        function_name.substr(0, 11) == "llvm.memcpy") {
+      if (call_instruction->getOperand(2)->getType() !=
+          code_context_.int64_type_)
+        throw NotSupportedException(
+            "memcpy with different size type than i64 not supported");
 
       InsertBytecodeInstruction(call_instruction, Opcode::llvm_memcpy,
                                 call_instruction->getOperand(0),
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.size() >= 13 && function_name.substr(0, 12) == "llvm.memmove") {
-      if (call_instruction->getOperand(2)->getType() != code_context_.int64_type_)
-        throw NotSupportedException("memmove with different size type than i64 not supported");
+    } else if (function_name.size() >= 13 &&
+               function_name.substr(0, 12) == "llvm.memmove") {
+      if (call_instruction->getOperand(2)->getType() !=
+          code_context_.int64_type_)
+        throw NotSupportedException(
+            "memmove with different size type than i64 not supported");
 
       InsertBytecodeInstruction(call_instruction, Opcode::llvm_memmove,
                                 call_instruction->getOperand(0),
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.size() >= 12 && function_name.substr(0, 11) == "llvm.memset") {
-      if (call_instruction->getOperand(2)->getType() != code_context_.int64_type_)
-        throw NotSupportedException("memset with different size type than i64 not supported");
+    } else if (function_name.size() >= 12 &&
+               function_name.substr(0, 11) == "llvm.memset") {
+      if (call_instruction->getOperand(2)->getType() !=
+          code_context_.int64_type_)
+        throw NotSupportedException(
+            "memset with different size type than i64 not supported");
 
       InsertBytecodeInstruction(call_instruction, Opcode::llvm_memset,
                                 call_instruction->getOperand(0),
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.size() >= 14 && function_name.substr(10, 13) == "with.overflow") {
+    } else if (function_name.size() >= 14 &&
+               function_name.substr(10, 13) == "with.overflow") {
       index_t result = 0;
       index_t overflow = 0;
       auto *type = call_instruction->getOperand(0)->getType();
       Opcode opcode = Opcode::undefined;
 
       // The destination slots have been already prepared from the analysis pass
-      PL_ASSERT(overflow_results_mapping_.find(call_instruction) != overflow_results_mapping_.end());
+      PL_ASSERT(overflow_results_mapping_.find(call_instruction) !=
+                overflow_results_mapping_.end());
 
       if (overflow_results_mapping_[call_instruction].first != nullptr)
-        result = GetValueSlot(overflow_results_mapping_[call_instruction].first);
+        result =
+            GetValueSlot(overflow_results_mapping_[call_instruction].first);
       if (overflow_results_mapping_[call_instruction].second != nullptr)
-        overflow = GetValueSlot(overflow_results_mapping_[call_instruction].second);
+        overflow =
+            GetValueSlot(overflow_results_mapping_[call_instruction].second);
 
       if (function_name.substr(5, 4) == "uadd") {
-        opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::llvm_uadd_overflow), type);
+        opcode = GetOpcodeForTypeIntTypes(
+            GET_FIRST_INT_TYPES(Opcode::llvm_uadd_overflow), type);
       } else if (function_name.substr(5, 4) == "sadd") {
-        opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::llvm_sadd_overflow), type);
+        opcode = GetOpcodeForTypeIntTypes(
+            GET_FIRST_INT_TYPES(Opcode::llvm_sadd_overflow), type);
       } else if (function_name.substr(5, 4) == "usub") {
-        opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::llvm_usub_overflow), type);
+        opcode = GetOpcodeForTypeIntTypes(
+            GET_FIRST_INT_TYPES(Opcode::llvm_usub_overflow), type);
       } else if (function_name.substr(5, 4) == "ssub") {
-        opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::llvm_ssub_overflow), type);
+        opcode = GetOpcodeForTypeIntTypes(
+            GET_FIRST_INT_TYPES(Opcode::llvm_ssub_overflow), type);
       } else if (function_name.substr(5, 4) == "umul") {
-        opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::llvm_umul_overflow), type);
+        opcode = GetOpcodeForTypeIntTypes(
+            GET_FIRST_INT_TYPES(Opcode::llvm_umul_overflow), type);
       } else if (function_name.substr(5, 4) == "smul") {
-        opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::llvm_smul_overflow), type);
+        opcode = GetOpcodeForTypeIntTypes(
+            GET_FIRST_INT_TYPES(Opcode::llvm_smul_overflow), type);
       } else {
-        throw NotSupportedException("the requested operation with overflow is not supported");
+        throw NotSupportedException(
+            "the requested operation with overflow is not supported");
       }
 
-      InsertBytecodeInstruction<2>(call_instruction,
-                                   opcode,
-                                   result,
-                                   overflow,
-                                   GetValueSlot(call_instruction->getOperand(0)),
-                                   GetValueSlot(call_instruction->getOperand(1)));
+      InsertBytecodeInstruction<2>(
+          call_instruction, opcode, result, overflow,
+          GetValueSlot(call_instruction->getOperand(0)),
+          GetValueSlot(call_instruction->getOperand(1)));
 
-    } else if (function_name.size() >= 27 && function_name.substr(0, 26) == "llvm.x86.sse42.crc32.64.64") {
+    } else if (function_name.size() >= 27 &&
+               function_name.substr(0, 26) == "llvm.x86.sse42.crc32.64.64") {
       if (call_instruction->getType() != code_context_.int64_type_)
-        throw NotSupportedException("sse42.crc32 with different size type than i64 not supported");
+        throw NotSupportedException(
+            "sse42.crc32 with different size type than i64 not supported");
 
-      InsertBytecodeInstruction(call_instruction, Opcode::llvm_sse42_crc32,
-                                call_instruction,
-                                call_instruction->getOperand(0),
-                                call_instruction->getOperand(1));
+      InsertBytecodeInstruction(
+          call_instruction, Opcode::llvm_sse42_crc32, call_instruction,
+          call_instruction->getOperand(0), call_instruction->getOperand(1));
 
     } else {
       // Function is not available in IR context, so we have to make an external
@@ -1597,7 +1700,8 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
       void *raw_pointer = code_context_.LookupBuiltinImpl(function_name);
 
       if (raw_pointer == nullptr) {
-        throw NotSupportedException("could not find external function: " + function_name);
+        throw NotSupportedException("could not find external function: " +
+                                    function_name);
       }
 
       // libffi is used for external function calls
@@ -1610,23 +1714,24 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
 
       size_t arguments_num = call_instruction->getNumArgOperands();
       ExternalCallContext call_context{dest_slot,
-                               GetFFIType(instruction->getType()),
-                               std::vector<index_t>(arguments_num),
-                               std::vector<ffi_type *>(arguments_num)};
+                                       GetFFIType(instruction->getType()),
+                                       std::vector<index_t>(arguments_num),
+                                       std::vector<ffi_type *>(arguments_num)};
 
       for (unsigned int i = 0; i < call_instruction->getNumArgOperands(); i++) {
         call_context.args[i] = GetValueSlot(call_instruction->getArgOperand(i));
-        call_context.arg_types[i] = GetFFIType(call_instruction->getArgOperand(i)->getType());
+        call_context.arg_types[i] =
+            GetFFIType(call_instruction->getArgOperand(i)->getType());
       }
 
       // add call context to interpreter context
       context_.external_call_contexts_.push_back(call_context);
 
       // insert bytecode instruction referring to this call context
-      InsertBytecodeExternalCallInstruction(call_instruction,
-                                            static_cast<index_t>(
-                                                context_.external_call_contexts_.size() - 1),
-                                            raw_pointer);
+      InsertBytecodeExternalCallInstruction(
+          call_instruction,
+          static_cast<index_t>(context_.external_call_contexts_.size() - 1),
+          raw_pointer);
     }
   } else {
     // Internal function call to another IR function in this code context
@@ -1641,21 +1746,27 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
     if (result != sub_context_mapping_.end()) {
       sub_context_index = result->second;
     } else {
-      auto sub_context = ContextBuilder::CreateInterpreterContext(code_context_, function);
+      auto sub_context =
+          ContextBuilder::CreateInterpreterContext(code_context_, function);
 
       context_.sub_contexts_.push_back(std::move(sub_context));
       sub_context_index = context_.sub_contexts_.size() - 1;
       sub_context_mapping_[function] = sub_context_index;
     }
 
-    InternalCallInstruction &bytecode_instruction = InsertBytecodeInternalCallInstruction(call_instruction, sub_context_index, dest_slot, call_instruction->getNumArgOperands());
+    InternalCallInstruction &bytecode_instruction =
+        InsertBytecodeInternalCallInstruction(
+            call_instruction, sub_context_index, dest_slot,
+            call_instruction->getNumArgOperands());
 
     for (unsigned int i = 0; i < call_instruction->getNumArgOperands(); i++) {
-      bytecode_instruction.args[i] = GetValueSlot(call_instruction->getArgOperand(i));
+      bytecode_instruction.args[i] =
+          GetValueSlot(call_instruction->getArgOperand(i));
 
       // just to make sure, we check that no function argument is bigger
       // than 8 Bytes
-      if (code_context_.GetTypeSize(call_instruction->getArgOperand(i)->getType()) > 8) {
+      if (code_context_.GetTypeSize(
+              call_instruction->getArgOperand(i)->getType()) > 8) {
         throw NotSupportedException("argument for internal call too big");
       }
     }
@@ -1665,22 +1776,21 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
 void ContextBuilder::TranslateSelect(const llvm::Instruction *instruction) {
   auto *select_instruction = llvm::cast<llvm::SelectInst>(&*instruction);
 
-  InsertBytecodeInstruction<2>(select_instruction,
-                               Opcode::select,
-                               GetValueSlot(select_instruction),
-                               GetValueSlot(select_instruction->getCondition()),
-                               GetValueSlot(select_instruction->getTrueValue()),
-                               GetValueSlot(select_instruction->getFalseValue()));
+  InsertBytecodeInstruction<2>(
+      select_instruction, Opcode::select, GetValueSlot(select_instruction),
+      GetValueSlot(select_instruction->getCondition()),
+      GetValueSlot(select_instruction->getTrueValue()),
+      GetValueSlot(select_instruction->getFalseValue()));
 }
 
-void ContextBuilder::TranslateExtractValue(const llvm::Instruction *instruction) {
+void ContextBuilder::TranslateExtractValue(
+    const llvm::Instruction *instruction) {
   auto *extract_instruction = llvm::cast<llvm::ExtractValueInst>(&*instruction);
 
   // Skip, if this ExtractValue instruction belongs to an overflow operation
-  auto call_result = overflow_results_mapping_.find(llvm::cast<llvm::CallInst>(
-      instruction->getOperand(0)));
-  if (call_result != overflow_results_mapping_.end())
-    return;
+  auto call_result = overflow_results_mapping_.find(
+      llvm::cast<llvm::CallInst>(instruction->getOperand(0)));
+  if (call_result != overflow_results_mapping_.end()) return;
 
   // Get value type
   llvm::Type *type = extract_instruction->getAggregateOperand()->getType();
@@ -1693,14 +1803,15 @@ void ContextBuilder::TranslateExtractValue(const llvm::Instruction *instruction)
 
   // Iterate indexes
   for (auto index_it = extract_instruction->idx_begin(),
-           index_end = extract_instruction->idx_end();
+            index_end = extract_instruction->idx_end();
        index_it != index_end; index_it++) {
     uint32_t index = *index_it;
 
     if (auto *array_type = llvm::dyn_cast<llvm::ArrayType>(type)) {
       // Advance offset
       offset_bits +=
-          code_context_.GetTypeAllocSizeInBits(array_type->getElementType()) * index;
+          code_context_.GetTypeAllocSizeInBits(array_type->getElementType()) *
+          index;
 
       // get inner type for next iteration
       type = array_type->getElementType();
@@ -1717,7 +1828,8 @@ void ContextBuilder::TranslateExtractValue(const llvm::Instruction *instruction)
       // get inner type for next iteration
       type = struct_type->getElementType(index);
     } else {
-      throw NotSupportedException("unexpected type in extractvalue instruction");
+      throw NotSupportedException(
+          "unexpected type in extractvalue instruction");
     }
   }
 
@@ -1725,8 +1837,11 @@ void ContextBuilder::TranslateExtractValue(const llvm::Instruction *instruction)
   PL_ASSERT(type == extract_instruction->getType());
 
   // number if bits to shift is an immediate value!
-  InsertBytecodeInstruction(extract_instruction, Opcode::extractvalue, GetValueSlot(extract_instruction), GetValueSlot(extract_instruction->getAggregateOperand()),
-                            static_cast<index_t>(offset_bits));
+  InsertBytecodeInstruction(
+      extract_instruction, Opcode::extractvalue,
+      GetValueSlot(extract_instruction),
+      GetValueSlot(extract_instruction->getAggregateOperand()),
+      static_cast<index_t>(offset_bits));
 }
 
 }  // namespace interpreter

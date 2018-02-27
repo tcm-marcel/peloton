@@ -10,13 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <include/codegen/query_compiler.h>
 #include "codegen/query.h"
+#include "codegen/interpreter/context_builder.h"
+#include "codegen/interpreter/query_interpreter.h"
+#include "codegen/query_compiler.h"
 #include "codegen/query_result_consumer.h"
 #include "common/timer.h"
 #include "executor/plan_executor.h"
-#include "codegen/interpreter/context_builder.h"
-#include "codegen/interpreter/query_interpreter.h"
 #include "settings/settings_manager.h"
 
 namespace peloton {
@@ -35,7 +35,8 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   llvm::Type *runtime_state_type = runtime_state_.FinalizeType(codegen);
   size_t parameter_size = codegen.SizeOf(runtime_state_type);
   PL_ASSERT((parameter_size % 8 == 0) &&
-      parameter_size >= sizeof(FunctionArguments) && "parameter size not multiple of 8");
+            parameter_size >= sizeof(FunctionArguments) &&
+            "parameter size not multiple of 8");
 
   // Allocate some space for the function arguments
   std::unique_ptr<char[]> param_data{new char[parameter_size]};
@@ -49,7 +50,8 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   func_args->query_parameters = &executor_context->GetParams();
   func_args->consumer_arg = consumer.GetConsumerState();
 
-  //bool force_interpreter = settings::SettingsManager::GetBool(settings::SettingId::codegen_interpreter);
+  // bool force_interpreter =
+  // settings::SettingsManager::GetBool(settings::SettingId::codegen_interpreter);
   bool force_interpreter = true;
   if (force_interpreter) {
     try {
@@ -79,8 +81,9 @@ void Query::Prepare(const QueryFunctions &query_funcs) {
   code_context_.Verify();
 
   // optimize the functions
-  // TODO: add switch to enable/disable optimization
-  // TODO: add timer to measure time used for optimization (see RuntimeStats)
+  // TODO(marcel): add switch to enable/disable optimization
+  // TODO(marcel): add timer to measure time used for optimization (see
+  // RuntimeStats)
   code_context_.Optimize();
 }
 
@@ -95,7 +98,8 @@ bool Query::CompileAndExecute(FunctionArguments *function_arguments,
   // Step 1: Compile all functions in context
   LOG_TRACE("Setting up Query ...");
 
-  // TODO: for now Compile() will always return true, find a way to catch
+  // TODO(marcel): for now Compile() will always return true, find a way to
+  // catch
   // compilation errors from LLVM
   if (!code_context_.Compile()) {
     return false;
@@ -193,9 +197,15 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   }
 
   // Create Bytecode
-  interpreter::InterpreterContext init_bytecode = interpreter::ContextBuilder::CreateInterpreterContext(code_context_, query_funcs_.init_func);
-  interpreter::InterpreterContext plan_bytecode = interpreter::ContextBuilder::CreateInterpreterContext(code_context_, query_funcs_.plan_func);
-  interpreter::InterpreterContext tear_down_bytecode = interpreter::ContextBuilder::CreateInterpreterContext(code_context_, query_funcs_.tear_down_func);
+  interpreter::InterpreterContext init_bytecode =
+      interpreter::ContextBuilder::CreateInterpreterContext(
+          code_context_, query_funcs_.init_func);
+  interpreter::InterpreterContext plan_bytecode =
+      interpreter::ContextBuilder::CreateInterpreterContext(
+          code_context_, query_funcs_.plan_func);
+  interpreter::InterpreterContext tear_down_bytecode =
+      interpreter::ContextBuilder::CreateInterpreterContext(
+          code_context_, query_funcs_.tear_down_func);
 
   // Time initialization
   if (stats != nullptr) {
@@ -208,12 +218,13 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   // Call init
   LOG_TRACE("Calling query's init() ...");
   try {
-    interpreter::QueryInterpreter::ExecuteFunction(init_bytecode, reinterpret_cast<char *>(function_arguments));
+    interpreter::QueryInterpreter::ExecuteFunction(
+        init_bytecode, reinterpret_cast<char *>(function_arguments));
   } catch (...) {
-    interpreter::QueryInterpreter::ExecuteFunction(tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
+    interpreter::QueryInterpreter::ExecuteFunction(
+        tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
     throw;
   }
-
 
   if (stats != nullptr) {
     timer.Stop();
@@ -225,9 +236,11 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
-    interpreter::QueryInterpreter::ExecuteFunction(plan_bytecode, reinterpret_cast<char *>(function_arguments));
+    interpreter::QueryInterpreter::ExecuteFunction(
+        plan_bytecode, reinterpret_cast<char *>(function_arguments));
   } catch (...) {
-    interpreter::QueryInterpreter::ExecuteFunction(tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
+    interpreter::QueryInterpreter::ExecuteFunction(
+        tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
     throw;
   }
 
@@ -241,7 +254,8 @@ bool Query::Interpret(FunctionArguments *function_arguments,
 
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
-  interpreter::QueryInterpreter::ExecuteFunction(tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
+  interpreter::QueryInterpreter::ExecuteFunction(
+      tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
 
   // No need to cleanup if we get an exception while cleaning up...
   if (stats != nullptr) {

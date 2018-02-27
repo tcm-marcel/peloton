@@ -10,19 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-
 #pragma once
 
 #include "common/macros.h"
-#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/IR/Type.h"
 
-#include <vector>
+#include <ffi.h>
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
-#include <cstdint>
-#include <ffi.h>
+#include <vector>
 
 namespace peloton {
 namespace codegen {
@@ -111,7 +110,10 @@ typedef struct {
 } ExternalCallContext;
 
 /**
- * A InterpreterContext contains all information necessary to run a LLVM function in the interpreter and is completely independent from the CodeContext it was created from (except for the tracing information in debug mode). It can be moved and copied.
+ * A InterpreterContext contains all information necessary to run a LLVM
+ * function in the interpreter and is completely independent from the
+ * CodeContext it was created from (except for the tracing information in debug
+ * mode). It can be moved and copied.
  */
 class InterpreterContext {
  public:
@@ -141,7 +143,8 @@ class InterpreterContext {
   static const char *GetOpcodeString(Opcode opcode);
 
   /**
-   * Returns the overall number of existing Opcodes (not trivial, as the Opcodes are created with expanding macros)
+   * Returns the overall number of existing Opcodes (not trivial, as the Opcodes
+   * are created with expanding macros)
    * @return overall number of existing Opcodes
    */
   inline static constexpr size_t GetNumberOpcodes() {
@@ -149,27 +152,32 @@ class InterpreterContext {
   }
 
   /**
-   * Return the instruction pointer to a given instruction index (from this context)
+   * Return the instruction pointer to a given instruction index (from this
+   * context)
    * @param index instruction index
    * @return pointer to the instruction at that index inside the bytecode
    */
   ALWAYS_INLINE inline const Instruction *GetIPFromIndex(index_t index) const {
-    return reinterpret_cast<const Instruction *>(const_cast<instr_slot_t *>(bytecode_.data()) + index);
+    return reinterpret_cast<const Instruction *>(
+        const_cast<instr_slot_t *>(bytecode_.data()) + index);
   }
 
   /**
-   * Returns the instruction index for a given instruction pointer (from this context)
+   * Returns the instruction index for a given instruction pointer (from this
+   * context)
    * @param instruction pointer to a given instruction inside the bytecode
    * @return index to the instruction the pointer is pointing to
    */
-  ALWAYS_INLINE inline index_t GetIndexFromIP(const Instruction* instruction) const {
-    index_t index = reinterpret_cast<const instr_slot_t *>(instruction) - bytecode_.data();
+  ALWAYS_INLINE inline index_t GetIndexFromIP(
+      const Instruction *instruction) const {
+    index_t index =
+        reinterpret_cast<const instr_slot_t *>(instruction) - bytecode_.data();
     return index;
   }
 
-  #ifndef NDEBUG
+#ifndef NDEBUG
   const llvm::Instruction *GetIRInstructionFromIP(index_t instr_slot) const;
-  #endif
+#endif
 
   /**
    * Returns the number of slots a given instruction occupies in the bytecode
@@ -180,12 +188,17 @@ class InterpreterContext {
   static size_t GetInstructionSlotSize(const Instruction *instruction);
 
   /**
-   * Returns the number of slots a given internal call instruction occupies in the bytecode stream. Internal instructions have a variable length, so the size has to be calculated.
+   * Returns the number of slots a given internal call instruction occupies in
+   * the bytecode stream. Internal instructions have a variable length, so the
+   * size has to be calculated.
    * @param instruction pointer to instruction of type internal call
    * @return number of slots (each 8 Byte) that are used by this instruction
    */
-  static ALWAYS_INLINE inline size_t GetInteralCallInstructionSlotSize(const InternalCallInstruction *instruction) {
-    const size_t number_slots = ((2 * (4 + instruction->number_args)) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
+  static ALWAYS_INLINE inline size_t GetInteralCallInstructionSlotSize(
+      const InternalCallInstruction *instruction) {
+    const size_t number_slots =
+        ((2 * (4 + instruction->number_args)) + sizeof(instr_slot_t) - 1) /
+        sizeof(instr_slot_t);
     PL_ASSERT(number_slots > 0);
     return number_slots;
   }
@@ -251,13 +264,13 @@ class InterpreterContext {
    */
   std::vector<InterpreterContext> sub_contexts_;
 
-  #ifndef NDEBUG
+#ifndef NDEBUG
   /**
    * In Debug mode: Trace mapping every bytecode instruction slot to the
    * LLVM instruction it comes from.
    */
   std::vector<const llvm::Instruction *> instruction_trace_;
-  #endif
+#endif
 
  private:
   friend QueryInterpreter;
