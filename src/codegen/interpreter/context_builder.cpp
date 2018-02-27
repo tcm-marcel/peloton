@@ -26,30 +26,10 @@ ContextBuilder::ContextBuilder(const CodeContext &code_context, const llvm::Func
 InterpreterContext ContextBuilder::CreateInterpreterContext(const CodeContext &code_context, const llvm::Function *function) {
   ContextBuilder builder(code_context, function);
 
-#ifndef NDEBUG
-  code_context.DumpContents();
-#endif
-
   builder.AnalyseFunction();
   builder.PerformNaiveRegisterAllocation();
-  //builder.PerformGreedyRegisterAllocation();
-
-#ifndef NDEBUG
-  // DEBUG
-  printf("IR:\n");
-  for (unsigned i = 0; i < builder.bb_reverse_post_order_.size(); i++) {
-    printf("%u:%s", i, CodeGen::Print(builder.bb_reverse_post_order_[i]).c_str());
-  }
-
-  printf("%s", builder.DumpValueInformation().c_str());
-#endif
-
-  builder.ValidateRegisterMapping();
-
   builder.TranslateFunction();
   builder.Finalize();
-
-  LOG_DEBUG("%s", builder.context_.DumpContents().c_str());
 
   return std::move(builder.context_);
 }
@@ -57,6 +37,8 @@ InterpreterContext ContextBuilder::CreateInterpreterContext(const CodeContext &c
 Opcode ContextBuilder::GetOpcodeForTypeAllTypes(Opcode untyped_op,
                                                 llvm::Type *type) const {
   index_t id = InterpreterContext::GetOpcodeId(untyped_op);
+
+  // This function highly depends on the macros in bytecode_instructions.def!
 
   if (type == code_context_.bool_type_ || type == code_context_.int8_type_)
     return InterpreterContext::GetOpcodeFromId(id + 0);
@@ -78,6 +60,8 @@ Opcode ContextBuilder::GetOpcodeForTypeIntTypes(Opcode untyped_op,
                                                 llvm::Type *type) const {
   index_t id = InterpreterContext::GetOpcodeId(untyped_op);
 
+  // This function highly depends on the macros in bytecode_instructions.def!
+
   if (type == code_context_.bool_type_ || type == code_context_.int8_type_)
     return InterpreterContext::GetOpcodeFromId(id + 0);
   else if (type == code_context_.int16_type_)
@@ -94,6 +78,8 @@ Opcode ContextBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
                                                   llvm::Type *type) const {
   index_t id = InterpreterContext::GetOpcodeId(untyped_op);
 
+  // This function highly depends on the macros in bytecode_instructions.def!
+
   // float is missing!
   if (type == code_context_.float_type_)
     return InterpreterContext::GetOpcodeFromId(id + 0);
@@ -106,6 +92,8 @@ Opcode ContextBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
 Opcode ContextBuilder::GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
                                                 llvm::Type *type) const {
   index_t id = InterpreterContext::GetOpcodeId(untyped_op);
+
+  // This function highly depends on the macros in bytecode_instructions.def!
 
   switch (code_context_.GetTypeSize(type)) {
     case 1:
@@ -132,6 +120,8 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(UNUSED_ATTRIBUTE const ll
                                                        index_t arg5,
                                                        index_t arg6) {
   PL_ASSERT(opcode != Opcode::undefined);
+
+  // If one instruction slot is selected, make sure only two arguments are passed
   PL_ASSERT(number_instruction_slots > 1 || (arg3 == 0 && arg4 == 0 && arg5 == 0 && arg6 == 0));
 
   instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots, 0);
@@ -173,6 +163,8 @@ ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
     UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
     index_t call_context,
     void *function) {
+
+  // calculate number of slots and assert it is 2 (this way we recognise if any size changes)
   const size_t number_slots = (sizeof(ExternalCallInstruction) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
   PL_ASSERT(number_slots == 2);
 
@@ -193,6 +185,7 @@ InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(U
                                                                    index_t sub_context,
                                                                    index_t dest_slot,
                                                                    size_t number_arguments) {
+  // calculate number of required instruction slots
   const size_t number_slots = ((2 * (4 + number_arguments)) + sizeof(instr_slot_t) - 1) / sizeof(instr_slot_t);
 
   instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
@@ -268,7 +261,7 @@ value_t ContextBuilder::GetConstantValue(const llvm::Constant *constant) const {
           }
         }
 
-        // fallthrough
+        // fallthrough: more complex pointer types
       }
 
       default:
@@ -286,17 +279,22 @@ ContextBuilder::value_index_t ContextBuilder::AddConstant(
   value_t value = GetConstantValue(constant);
   value_index_t value_index;
 
-  // check if entry with this value already exists
+  // We merge all constants that share the same value (not the type!)
+
+  // Check if entry with this value already exists
   auto constant_result = std::find_if( constants_.begin(), constants_.end(),
                           [value](const std::pair<value_t, value_index_t>& item){ return item.first == value;} );
 
+
   if (constant_result == constants_.end()) {
+    // create new constant with that value
     value_index = CreateValueIndex(constant);
     constants_.emplace_back(std::make_pair(value, value_index));
 
     // constants liveliness starts at program start
     value_liveliness_[value_index].definition = 0;
   } else {
+    // value already exists, create alias
     value_index = constant_result->second;
     CreateValueAlias(constant, value_index);
   }
@@ -328,6 +326,9 @@ void ContextBuilder::AddValueUsage(value_index_t value_index,
 }
 
 index_t ContextBuilder::GetTemporaryValueSlot(const llvm::BasicBlock *bb) {
+  // we basically count the number of additional value slots that are
+  // requested per basic block
+
   // new entry in map is created automatically if necessary
   number_temporary_values_[bb]++;
 
@@ -377,6 +378,8 @@ uint64_t ContextBuilder::GetConstantIntegerValueUnsigned(llvm::Value *constant) 
 }
 
 bool ContextBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb, const llvm::BasicBlock *succ) const {
+  // walk the vector where we saved the basic block pointers in R
+  // reverse post order (RPO)
   for (size_t i = 0; i < bb_reverse_post_order_.size() - 1; i++) {
     if (bb_reverse_post_order_[i] == bb && bb_reverse_post_order_[i + 1] == succ)
       return true;
@@ -423,20 +426,11 @@ void ContextBuilder::AnalyseFunction() {
       bool is_phi = false;
       bool is_non_zero_gep = false;
 
-      // DEBUG
-      #ifndef NDEBUG
-      printf("analysing: %s\n", CodeGen::Print(instruction).c_str());
-      #endif
-
       if (instruction->getOpcode() == llvm::Instruction::PHI)
         is_phi = true;
       if (instruction->getOpcode() == llvm::Instruction::GetElementPtr &&
           !llvm::cast<llvm::GetElementPtrInst>(instruction)->hasAllZeroIndices())
         is_non_zero_gep = true;
-
-      // TODO
-      if (is_phi)
-        continue;
 
       // Exception 1: Skip the ExtractValue instructions we already
       // processed in Exception 6
@@ -574,41 +568,11 @@ void ContextBuilder::AnalyseFunction() {
       }
     }
 
-    // phi moves
-    for (auto succ_iterator = llvm::succ_begin(bb); succ_iterator != llvm::succ_end(bb); ++succ_iterator) {
-      for (auto instruction_iterator = succ_iterator->begin(); auto *phi_node = llvm::dyn_cast<llvm::PHINode>(&*instruction_iterator); ++instruction_iterator) {
-        // TODO
-        const llvm::Value *operand = phi_node->getIncomingValueForBlock(bb);
-
-        #ifndef NDEBUG
-        printf("phi_node: %s\n", CodeGen::Print(phi_node).c_str());
-        printf("phi_value: %s\n", CodeGen::Print(phi_node->getIncomingValueForBlock(bb)).c_str());
-        #endif
-
-        value_index_t phi_value_index;
-        if (value_mapping_.find(phi_node) == value_mapping_.end()) {
-          phi_value_index = CreateValueIndex(phi_node);
-          AddValueDefinition(phi_value_index, instruction_index - 1);
-        } else {
-          phi_value_index = GetValueIndex(phi_node);
-        }
-
-        value_index_t operand_value_index;
-        if (IsConstantValue(operand)) {
-          operand_value_index = AddConstant(llvm::cast<llvm::Constant>(operand));
-        } else {
-          operand_value_index = GetValueIndex(operand);
-        }
-        AddValueUsage(operand_value_index, instruction_index - 1);
-      }
-    }
-
     bb_last_instruction_index[bb] = instruction_index - 1;
   }
 
   instruction_index_max_ = instruction_index - 1;
 
-  /*
   // revisit phi nodes to extend the lifetime of their arguments if necessary
   // has to be done in second pass, as we need to know the last instruction
   // index for each basic block
@@ -631,7 +595,6 @@ void ContextBuilder::AnalyseFunction() {
       }
     }
   }
-  */
 }
 
 void ContextBuilder::PerformNaiveRegisterAllocation() {
@@ -692,6 +655,8 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
   }
 
 #ifndef NDEBUG
+  // additional check in debug mode, to ensure that our assertion with the
+  // vector already sorted by .definition (except zero) is currect
   instruction_index_t instruction_index = 1;
 #endif
 
@@ -713,9 +678,10 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
 }
 
 void ContextBuilder::ValidateRegisterMapping() {
-  // array slots X time that tracks if the slots if occupied at that time
+  // array [slots][time] that simply tracks if a slots if occupied at a time
   std::vector<bool> slot_occupied(number_value_slots_ * instruction_index_max_, false);
 
+  // define a setter and a getter for the array
   auto get = [&slot_occupied, this] (index_t slot, instruction_index_t time) {
     return slot_occupied[number_value_slots_ * time + slot];
   };
@@ -726,12 +692,14 @@ void ContextBuilder::ValidateRegisterMapping() {
 
   PL_ASSERT(value_slots_.size() == value_liveliness_.size());
 
+  // iterate over all livetimes and out them in the array
   for (size_t i = 0; i < value_liveliness_.size(); i++) {
     index_t slot = value_slots_[i];
     if (slot == 0)
       continue;
 
     for (instruction_index_t time = value_liveliness_[i].definition; time < value_liveliness_[i].last_usage; time++) {
+      // check if the range in this register is not occupied by anyone else
       if (get(slot, time) != false)
         throw Exception("register mapping is inavlid");
       set(slot, time);
@@ -740,6 +708,10 @@ void ContextBuilder::ValidateRegisterMapping() {
 }
 
 std::string ContextBuilder::DumpValueInformation() {
+  // This function dumps the value liveliness and the register allocation
+  // in csv format for debugging purposes: every instruction_index is one row,
+  // every value index is one column.
+
   std::string output = "index;instruction;";
   std::string row;
 
@@ -749,6 +721,7 @@ std::string ContextBuilder::DumpValueInformation() {
   }
   output += "\n";
 
+  // dump for every instruction index
   instruction_index_t instruction_index = 0;
   for (llvm::ReversePostOrderTraversal<const llvm::Function *>::rpo_iterator
            traversal_iterator = rpo_traversal_.begin();
@@ -762,6 +735,8 @@ std::string ContextBuilder::DumpValueInformation() {
       const llvm::Instruction *instruction = instr_iterator;
 
       output += std::to_string(instruction_index) + ";" + CodeGen::Print(instruction) + ";";
+
+      // for every value index, print if its live or not
       for (size_t i = 0; i < value_liveliness_.size(); i++) {
         if (instruction_index >= value_liveliness_[i].definition &&
             instruction_index <= value_liveliness_[i].last_usage)
@@ -828,19 +803,31 @@ std::string ContextBuilder::DumpValueInformation() {
 }
 
 void ContextBuilder::TranslateFunction() {
+  // Map every basic block an index in the resulting bytecode stream. This
+  // is needed to perform the relocations in the branch instructions.
   std::unordered_map<const llvm::BasicBlock *, index_t> bb_mapping;
+
+  // Collect all bytecode relocations that have to be performed after
+  // translation, when the mapping information in bb_mapping is complete.
   std::vector<BytecodeRelocation> bytecode_relocations;
 
+  // Iterate the basic blocks in reverse post order (RPO)
+  // Linear scan register allocation requires RPO traversal
+  // Initializing the RPO traversal is expensice, so we initialize it once
+  // for the ContextBuilder object and reuse it.
   for (llvm::ReversePostOrderTraversal<const llvm::Function *>::rpo_iterator
            traversal_iterator = rpo_traversal_.begin();
        traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
     const llvm::BasicBlock* bb = *traversal_iterator;
 
+    // add basic block mapping
     bb_mapping[bb] = context_.bytecode_.size();
 
+    // Interate all instruction in the basic block
     for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin(); instr_iterator != bb->end(); ++instr_iterator) {
       const llvm::Instruction *instruction = instr_iterator;
 
+      // Dispatch to the respective translator function
       switch (instruction->getOpcode()) {
         // Terminators
         case llvm::Instruction::Br:
@@ -952,6 +939,7 @@ void ContextBuilder::TranslateFunction() {
     }
   }
 
+  // apply the relocations required by the placed branch instructions
   for (auto &relocation : bytecode_relocations) {
     reinterpret_cast<Instruction *>(&context_.bytecode_[relocation.instruction_slot])->args[relocation.argument] = bb_mapping[relocation.bb];
   }
@@ -987,11 +975,15 @@ void ContextBuilder::ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb) {
     index_t src;
   } AdditionalMove;
 
+  // Takes track of additional moves (du to PHI swap problem) that have to be
+  // applied after all PHI nodes have been processed.
   std::vector<AdditionalMove> additional_moves;
 
   for (auto succ_iterator = llvm::succ_begin(bb); succ_iterator != llvm::succ_end(bb); ++succ_iterator) {
-    // if the basic block is its own successor, we have to create additional
-    // mov instructions (known as the phi swap problem)
+    // If the basic block is its own successor, we take risk to run into the PHI
+    // swap problem (lost copy problem). To avoid this, we move the values in
+    // temporary registers and move them to their destination after processing
+    // all other PHI nodes.
     if (*succ_iterator == bb) {
       for (auto instruction_iterator = succ_iterator->begin(); auto *phi_node = llvm::dyn_cast<llvm::PHINode>(&*instruction_iterator); ++instruction_iterator) {
         index_t temp_slot = GetTemporaryValueSlot(bb);
@@ -1004,7 +996,7 @@ void ContextBuilder::ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb) {
         additional_moves.push_back({phi_node, GetValueSlot(phi_node), temp_slot});
       }
 
-    // common case: create mov instruction to destination slot
+    // Common case: create mov instruction to destination slot
     } else {
       for (auto instruction_iterator = succ_iterator->begin(); auto *phi_node = llvm::dyn_cast<llvm::PHINode>(&*instruction_iterator); ++instruction_iterator) {
         if (GetValueSlot(phi_node) == GetValueSlot(phi_node->getIncomingValueForBlock(
@@ -1020,6 +1012,7 @@ void ContextBuilder::ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb) {
     }
   }
 
+  // Place additional moves if needed
   for (auto &entry : additional_moves) {
     InsertBytecodeInstruction(entry.instruction,
                               Opcode::phi_mov,
@@ -1033,11 +1026,12 @@ void ContextBuilder::TranslateBranch(const llvm::Instruction *instruction, std::
 
   // conditional branch
   if (branch_instruction->isConditional()) {
-    // The first operand is the false branch, while the second one
-    // is the true one (printed llvm assembly is the other way round)
+    // The first operand in the IR is the false branch, while the second one
+    // is the true one (printed llvm assembly is the other way round).
     // To be consistent, we use the order of the memory representation
-    // in the bytecode.
+    // in our bytecode.
 
+    // If false branch is next basic block, we can use a fall through branch
     if (BasicBlockIsRPOSucc(branch_instruction->getParent(), llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(1)))) {
       InsertBytecodeInstruction(instruction,
                                 Opcode::branch_cond_ft,
@@ -1047,7 +1041,12 @@ void ContextBuilder::TranslateBranch(const llvm::Instruction *instruction, std::
                                           1,
                                           llvm::cast<llvm::BasicBlock>(
                                               branch_instruction->getOperand(2))};
+
+      // add relocation entry, to insert missing information of destination
+      // later
       bytecode_relocations.push_back(relocation_false);
+
+    // no fall through
     } else {
       InsertBytecodeInstruction(instruction,
                                 Opcode::branch_cond,
@@ -1057,15 +1056,25 @@ void ContextBuilder::TranslateBranch(const llvm::Instruction *instruction, std::
                                           1,
                                           llvm::cast<llvm::BasicBlock>(
                                               branch_instruction->getOperand(1))};
+
+      // add relocation entry, to insert missing information of destination
+      // later
       bytecode_relocations.push_back(relocation_false);
+
       BytecodeRelocation relocation_true{static_cast<index_t>(context_.bytecode_.size() - 1),
                                          2,
                                          llvm::cast<llvm::BasicBlock>(
                                              branch_instruction->getOperand(2))};
+
+      // add relocation entry, to insert missing information of destination
+      // later
       bytecode_relocations.push_back(relocation_true);
     }
+
   // unconditional branch
   } else {
+    // If the unconditional branch points to the next basic block,
+    // we can omit the branch instruction
     if (!BasicBlockIsRPOSucc(branch_instruction->getParent(), llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(0)))) {
       InsertBytecodeInstruction(instruction, Opcode::branch_uncond, 0);
 
@@ -1073,6 +1082,9 @@ void ContextBuilder::TranslateBranch(const llvm::Instruction *instruction, std::
                                     0,
                                     llvm::cast<llvm::BasicBlock>(
                                         branch_instruction->getOperand(0))};
+
+      // add relocation entry, to insert missing information of destination
+      // later
       bytecode_relocations.push_back(relocation);
     }
   }
@@ -1080,6 +1092,10 @@ void ContextBuilder::TranslateBranch(const llvm::Instruction *instruction, std::
 
 void ContextBuilder::TranslateReturn(const llvm::Instruction *instruction) {
   auto *return_instruction = llvm::cast<llvm::ReturnInst>(&*instruction);
+
+  // We only have one ret bytecode instruction. If the function returns void,
+  // the instruction will return the value of the dummy value slot zero,
+  // but no one will every pick up that value.
 
   index_t return_slot = 0;
   if (return_instruction->getNumOperands() > 0)
@@ -1222,8 +1238,9 @@ void ContextBuilder::TranslateGetElementPtr(const llvm::Instruction *instruction
   if (gep_instruction->hasAllZeroIndices())
     return;
 
-  // offset is an immediate constant, not a slot index
-  // instruction is created here, but offset will be filled in later
+  // The offset is an immediate constant, not a slot index
+  // instruction is created here, but offset will be filled in later,
+  // because we may merge it with constant array accesses
   auto &gep_offset_bytecode_instruction = InsertBytecodeInstruction(
       gep_instruction,
       Opcode::gep_offset,
@@ -1309,6 +1326,12 @@ void ContextBuilder::TranslateGetElementPtr(const llvm::Instruction *instruction
 
 void ContextBuilder::TranslateFloatIntCast(const llvm::Instruction *instruction) {
   auto *cast_instruction = llvm::dyn_cast<llvm::CastInst>(&*instruction);
+
+  // These instruction basically exist from every integer type to every
+  // floating point type and the other way round.
+  // We can only expand instructions in one dimension, so we expand the
+  // integer dimension and create the floating point instances manually
+  // (naming: float and double)
 
   Opcode opcode = Opcode::undefined;
 
@@ -1483,7 +1506,8 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
   llvm::Function *function = call_instruction->getCalledFunction();
 
   if (function->isDeclaration()) {
-    // lookup function name
+    // The only way to find out about the called function (even if its an
+    // intrinsic) is to check the function name string
     std::string function_name = function->getName().str();
 
     if (function_name.substr(0, 11) == "llvm.memcpy") {
@@ -1519,16 +1543,13 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
       auto *type = call_instruction->getOperand(0)->getType();
       Opcode opcode = Opcode::undefined;
 
-      if (call_instruction->getNumUses() > 2)
-        throw NotSupportedException("*.with.overflow intrinsics with more than two uses not supported");
-
+      // The destination slots have been already prepared from the analysis pass
       PL_ASSERT(overflow_results_mapping_.find(call_instruction) != overflow_results_mapping_.end());
 
       if (overflow_results_mapping_[call_instruction].first != nullptr)
         result = GetValueSlot(overflow_results_mapping_[call_instruction].first);
       if (overflow_results_mapping_[call_instruction].second != nullptr)
         overflow = GetValueSlot(overflow_results_mapping_[call_instruction].second);
-
 
       if (function_name.substr(5, 4) == "uadd") {
         opcode = GetOpcodeForTypeIntTypes(GET_FIRST_INT_TYPES(Opcode::llvm_uadd_overflow), type);
@@ -1552,6 +1573,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                    overflow,
                                    GetValueSlot(call_instruction->getOperand(0)),
                                    GetValueSlot(call_instruction->getOperand(1)));
+
     } else if (function_name.substr(0, 26) == "llvm.x86.sse42.crc32.64.64") {
       if (call_instruction->getType() != code_context_.int64_type_)
         throw NotSupportedException("sse42.crc32 with different size type than i64 not supported");
@@ -1560,16 +1582,21 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                 call_instruction,
                                 call_instruction->getOperand(0),
                                 call_instruction->getOperand(1));
+
     } else {
-      // function is not available in IR context, so we have to make an external
+      // Function is not available in IR context, so we have to make an external
       // function call
 
-      // lookup function in code context
+      // lookup function pointer in code context
       void *raw_pointer = code_context_.LookupBuiltinImpl(function_name);
 
       if (raw_pointer == nullptr) {
         throw NotSupportedException("could not find external function: " + function_name);
       }
+
+      // libffi is used for external function calls
+      // Here we collect all the information that will be needed at runtime
+      // (function activation time) to create the libffi call interface.
 
       index_t dest_slot = 0;
       if (!instruction->getType()->isVoidTy())
@@ -1586,22 +1613,23 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
         call_context.arg_types[i] = GetFFIType(call_instruction->getArgOperand(i)->getType());
       }
 
-      // init later because of absolute pointers
-
+      // add call context to interpreter context
       context_.external_call_contexts_.push_back(call_context);
 
+      // insert bytecode instruction referring to this call context
       InsertBytecodeExternalCallInstruction(call_instruction,
                                             static_cast<index_t>(
                                                 context_.external_call_contexts_.size() - 1),
                                             raw_pointer);
     }
   } else {
-    // internal function call to another IR function
+    // Internal function call to another IR function in this code context
 
     index_t dest_slot = 0;
     if (!instruction->getType()->isVoidTy())
       dest_slot = GetValueSlot(call_instruction);
 
+    // Translate the interpreter context for the function we want to call
     index_t sub_context_index;
     const auto result = sub_context_mapping_.find(function);
     if (result != sub_context_mapping_.end()) {
@@ -1619,6 +1647,8 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
     for (unsigned int i = 0; i < call_instruction->getNumArgOperands(); i++) {
       bytecode_instruction.args[i] = GetValueSlot(call_instruction->getArgOperand(i));
 
+      // just to make sure, we check that no function argument is bigger
+      // than 8 Bytes
       if (code_context_.GetTypeSize(call_instruction->getArgOperand(i)->getType()) > 8) {
         throw NotSupportedException("argument for internal call too big");
       }
@@ -1640,7 +1670,7 @@ void ContextBuilder::TranslateSelect(const llvm::Instruction *instruction) {
 void ContextBuilder::TranslateExtractValue(const llvm::Instruction *instruction) {
   auto *extract_instruction = llvm::cast<llvm::ExtractValueInst>(&*instruction);
 
-  // Skip if this ExtractValue instruction belongs to an overflow operation
+  // Skip, if this ExtractValue instruction belongs to an overflow operation
   auto call_result = overflow_results_mapping_.find(llvm::cast<llvm::CallInst>(
       instruction->getOperand(0)));
   if (call_result != overflow_results_mapping_.end())

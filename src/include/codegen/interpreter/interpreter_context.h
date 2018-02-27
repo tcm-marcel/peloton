@@ -34,7 +34,7 @@ namespace interpreter {
 class QueryInterpreter;
 class ContextBuilder;
 
-// type definitions
+// Type definitions to match the LLVM terminology
 using i8 = uint8_t;
 using i16 = uint16_t;
 using i32 = uint32_t;
@@ -43,7 +43,9 @@ using value_t = uint64_t;
 using index_t = uint16_t;
 using instr_slot_t = uint64_t;
 
-
+/**
+ * Enum holding all available instructions in all
+ */
 enum class Opcode : index_t {
   undefined,
 
@@ -54,11 +56,26 @@ enum class Opcode : index_t {
   NUMBER_OPCODES
 };
 
+/**
+ * Struct to access a generic bytecode instruction.
+ * Every bytecode instruction starts with a 2 byte Opcode, followed by a
+ * variable number of 2 byte arguments. (Exception: ExternalCallInstruction)
+ *
+ * This struct is only for accessing Instructions, not for saving them!
+ * (sizeof returns a wrong value) All bytecode instructions are saved in
+ * one or more 8 byte instructions slots (instr_slot_t) in the bytecode stream.
+ */
 typedef struct {
   Opcode op;
   index_t args[];
 } Instruction;
 
+/**
+ * Specialized struct for accessing a InternalCallInstruction. The number of
+ * arguments in .args[] is variable and must match the value .number_args .
+ * GetInteralCallInstructionSlotSize uses this information to calculate the
+ * number of occupied instruction slots.
+ */
 typedef struct {
   Opcode op;
   index_t sub_context;
@@ -67,12 +84,25 @@ typedef struct {
   index_t args[];
 } InternalCallInstruction;
 
+/**
+ * Specialized struct for accessing a ExternalCallInstruction. It is the only
+ * instruction, that contains a field that is greater than 2 byte.
+ * Because libffi requires pointers to value slots of the current
+ * activation record, the instruction itself only contains an index for
+ * accessing the proper call context. During interpretation a call activation
+ * is created for every call context, holding the actual runtime pointers,
+ * which can be accessed with the same index.
+ */
 typedef struct {
   Opcode op;
   index_t external_call_context;
   void (*function)(void);
 } ExternalCallInstruction;
 
+/**
+ * Call context holding information needed to create a runtime call activation
+ * for a ExternalCallInstruction in the bytecode stream.
+ */
 typedef struct {
   index_t dest_slot;
   ffi_type *dest_type;
@@ -178,15 +208,54 @@ class InterpreterContext {
   InterpreterContext() {}
 
  private:
+  /**
+   * Number of needed value slots at runtime.
+   */
   size_t number_values_;
+
+  /**
+   * Constants needed during runtime and the value slot they belong.
+   */
   std::vector<std::pair<value_t, index_t> > constants_;
+
+  /**
+   * Holds the value slots in which the function arguments get put
+   * during runtime initialization. (accessed by argument index)
+   */
   std::vector<index_t> function_arguments_;
+
+  /**
+   * This array of instruction slots holds the actual bytecode that is
+   * interpreted. Usually one instruction occupies one slot, but some
+   * instruction require several slots. Except for InternalCallInstruction,
+   * all instruction have a static size. The number of occipied instruction
+   * slots for an instruction can be obtained by GetInstructionSlotSize()
+   *
+   * The "Instruction" struct can be used to access every instruction in a
+   * generic way.
+   *
+   * It can be accessed by index (instruction index) oder a direct pointer
+   * to a instruction slot (IP).
+   */
   std::vector<instr_slot_t> bytecode_;
+
+  /**
+   * Call contexts that belong to ExternalCallInstructions in the bytecode,
+   * accessed by index.
+   */
   std::vector<ExternalCallContext> external_call_contexts_;
 
+  /**
+   * Hierarchical array of further instruction contexts belonging to
+   * InteralFunctionCalls, accessed by index.
+   */
   std::vector<InterpreterContext> sub_contexts_;
 
   #ifndef NDEBUG
+  /**
+   * In Debug mode: Trace mapping every bytecode instruction slot to the
+   * LLVM instruction it comes from.
+   */
   std::vector<const llvm::Instruction *> instruction_trace_;
   #endif
 

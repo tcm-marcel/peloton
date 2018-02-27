@@ -20,6 +20,12 @@ namespace peloton {
 namespace codegen {
 namespace interpreter {
 
+/**
+ * Holds the runtime information for a external funtion call. Because libffi
+ * requires pointers to the actual value slots, this information is different
+ * for every function activation, and can not be stored in the interpreter
+ * context.
+ */
 typedef struct {
   ffi_cif call_interface;
   std::vector<value_t *> value_pointers;
@@ -29,56 +35,140 @@ typedef struct {
 
 class QueryInterpreter {
  public:
-  explicit QueryInterpreter(const InterpreterContext &context);
-
+  /**
+   * Executes a translated function with the interpreter
+   * @param context interpreter context of translated function
+   * @param arguments vector of function arguments (stored as value_t). The
+   * number of arguments must match the number expected by the executed function.
+   * @return return Value of the LLVM function or undefined if void.
+   */
   static value_t ExecuteFunction(const InterpreterContext &context, const std::vector<value_t> &arguments);
+  /**
+   * Executes a translated function with the interpreter
+   * (Wrapper for usage with a single char* argument)
+   * @param context Interpreter context of translated function, must
+   * expect one argument.
+   * @param arguments Char pointer argument of the function.
+   */
   static void ExecuteFunction(const InterpreterContext &context, char *param);
 
  private:
+  explicit QueryInterpreter(const InterpreterContext &context);
+
+  /**
+   * Executes a function with the given arguments. The return value can
+   * afterwards retrieved with GetReturnValue(). This function is also called
+   * for internal function calls in this context.
+   * @param arguments Vector of function arguments (stored as value_t). The
+   * number of arguments must match the number expected by the executed function.
+   */
   void ExecuteFunction(const std::vector<value_t> &arguments);
+
+  /**
+   * Initializes the activation record by allocating the value slots, placing
+   * function arguments and constants and preparing call contexts.
+   * @param arguments Vector of function arguments (stored as value_t). The
+   * number of arguments must match the number expected by the executed function.
+   */
   void InitializeActivationRecord(const std::vector<value_t> &arguments);
 
+  /**
+   * Returns the function return value _after_ execution.
+   * @tparam type_t Expected return type.
+   * @return Return value of executed function or undefined if void.
+   */
   template <typename type_t>
   type_t GetReturnValue();
 
+  /**
+   * Get the current value of a value slot.
+   * @tparam type_t requested type
+   * @param index value slot index
+   * @return value as requested type
+   */
   template <typename type_t>
   ALWAYS_INLINE inline type_t GetValue(const index_t index) {
     PL_ASSERT(index >= 0 && index < context_.number_values_);
     return *reinterpret_cast<type_t *>(&values_[index]);
   }
 
+  /**
+   * Get the reference to a value slot. Usually SetValue() should be used
+   * to set the values, but some use cases require pointers/references to the
+   * slots.
+   * @tparam type_t requested type
+   * @param index value slot index
+   * @return typed reference to the requested slot
+   */
   template <typename type_t>
   ALWAYS_INLINE inline type_t &GetValueReference(const index_t index) {
     PL_ASSERT(index >= 0 && index < context_.number_values_);
     return reinterpret_cast<type_t &>(values_[index]);
   }
 
+
+  /**
+   * Set the current value of a slot
+   * @tparam type_t requested type
+   * @param index value slot index
+   * @param value value of type type_t, that shall be set
+   */
   template <typename type_t>
   ALWAYS_INLINE inline void SetValue(const index_t index, const type_t value) {
     PL_ASSERT(index >= 0 && index < context_.number_values_);
     *reinterpret_cast<type_t *>(&values_[index]) = value;
 
-#ifdef LOG_DEBUG_ENABLED
+#ifdef LOG_TRACE_ENABLED
     std::ostringstream output;
     output << "  [" << std::dec << std::setw(3) << index << "] <= " << value << "/0x" << std::hex << value;
-    printf("%s\n", output.str().c_str());
+    LOG_TRACE("%s", output.str().c_str());
 #endif
   }
 
+  /**
+   * Advance the instruction pointer by a compile-time value.
+   * @tparam number_instruction_slots size of current instruction
+   * @param instruction current instruction pointer
+   * @return new instruction pointer
+   */
   template <size_t number_instruction_slots>
   ALWAYS_INLINE inline const Instruction *AdvanceIP(const Instruction *instruction) {
     auto next = reinterpret_cast<const Instruction *>(const_cast<instr_slot_t *>(reinterpret_cast<const instr_slot_t *>(instruction)) + number_instruction_slots);
     return next;
   }
 
+  /**
+   * Advance the instruction pointer by a run-time value.
+   * @tparam number_instruction_slots size of current instruction
+   * @param instruction current instruction pointer
+   * @return new instruction pointer
+   */
   ALWAYS_INLINE inline const Instruction *AdvanceIP(const Instruction *instruction, size_t number_instruction_slots) {
     auto next = reinterpret_cast<const Instruction *>(const_cast<instr_slot_t *>(reinterpret_cast<const instr_slot_t *>(instruction)) + number_instruction_slots);
     return next;
   }
 
+  /**
+   * Allocate memory and return a pointer to it. (Memory is managed and gets
+   * freed after the interpreter exits)
+   * @param number_bytes number of bytes to allocate
+   * @return pointer to the allocated memory
+   */
   uintptr_t AllocateMemory(size_t number_bytes);
 
 
+  //--------------------------------------------------------------------------//
+  //                          Instruction Handlers
+  //
+  // - The following functions are the instruction handlers for the bytecode
+  //   instructions defined in bytecode_instructions.def .
+  // - The signatures of those functions are not code style conform, as they are
+  //   generated from the opcode mnemonic
+  // - If the instruction is marked as a typed instruction in the .def file,
+  //   it has a templated handler. Some handlers only support floating point or
+  //   integer types, some both. Static asserts ensure this.
+  // - Because all the handlers will get inlined in the dispatch area, their
+  //   definition must be in this header file.
   //--------------------------------------------------------------------------//
 
   template <typename type_t>
@@ -496,8 +586,7 @@ class QueryInterpreter {
     ffi_call(&call_activation.call_interface, call_instruction->function,
              call_activation.return_pointer, reinterpret_cast<void **>(call_activation.value_pointers.data()));
 
-    // DEBUG
-#ifdef LOG_DEBUG_ENABLED
+#ifdef LOG_TRACE_ENABLED
     if (context_.external_call_contexts_[call_instruction->external_call_context].dest_type != &ffi_type_void) {
       std::ostringstream output;
       value_t value =
@@ -505,7 +594,7 @@ class QueryInterpreter {
       output << "  [" << std::dec << std::setw(3)
              << context_.external_call_contexts_[call_instruction->external_call_context].dest_slot
              << "] <= " << value << " / 0x" << std::hex << value << ",";
-      printf("%s\n", output.str().c_str());
+      LOG_TRACE("%s", output.str().c_str());
     }
 #endif
 
@@ -644,13 +733,34 @@ class QueryInterpreter {
   //--------------------------------------------------------------------------//
 
  private:
+  /**
+   * This static array holds the goto-pointer for the dispatch area for each
+   * Opcode. It will be filled once, when the interpreter is called the
+   * first time.
+   */
   static void *label_pointers_[InterpreterContext::GetNumberOpcodes()];
 
-  // 64 Byte is common for cache lines
+  /**
+   * Value slots (register) for the current function activation.
+   * (Aligned by something that is most likely the cache line size)
+   */
   alignas(64) std::vector<value_t> values_;
+
+  /**
+   * Holds all allocations made with alloca. We do not need to access them,
+   * but the unique pointer ensures they will be released at the end.
+   */
   std::vector<std::unique_ptr<char[]>> allocations_;
+
+  /**
+   * Holds the call activation records for all external call instructions.
+   * (Created during initialization)
+   */
   std::vector<CallActivation> call_activations_;
 
+  /**
+   * Interpreter context used for execution.
+   */
   const InterpreterContext &context_;
 
  private:

@@ -51,7 +51,7 @@ class ContextBuilder {
   // understandable. The context builder creates indexes to identify the
   // LLVM types, which usually are only accessed by raw pointers.
   // Those types shall indicate which index is meant by a function.
-  // None of these indexes end up the interpreter context!
+  // None of these indexes end up in the interpreter context!
   using value_index_t = index_t;
   using instruction_index_t = index_t;
 
@@ -287,6 +287,16 @@ class ContextBuilder {
    */
   Opcode GetOpcodeForTypeSizeIntTypes(Opcode untyped_op, llvm::Type *type) const;
 
+  /**
+   * Insert abytecode instruction with up to 6 arguments into the bytecode
+   * stream.
+   * @tparam number_instruction_slots Number of instruction slots this
+   * instruction occupies (will be checked with number of arguments)
+   * @param llvm_instruction LLVM function this instruction is created from.
+   * (Only needed for tracing information, not used in Release mode!)
+   * @param opcode Opcode of the bytecode instruction
+   * @return Reference to the created instruction in the bytecode stream.
+   */
   template <size_t number_instruction_slots = 1>
   Instruction &InsertBytecodeInstruction(const llvm::Instruction *llvm_instruction,
                                          Opcode opcode,
@@ -297,24 +307,70 @@ class ContextBuilder {
                                          index_t arg4 = 0,
                                          index_t arg5 = 0,
                                          index_t arg6 = 0);
+
+  /**
+   * Insert bytecode instruction with 3 arguments into the bytecode stream.
+   * Wrapper that automatically gets the value slots for the LLVM values
+   * provided.
+   */
   Instruction &InsertBytecodeInstruction(const llvm::Instruction *llvm_instruction,
                                          Opcode opcode,
                                          const llvm::Value *arg0,
                                          const llvm::Value *arg1,
                                          const llvm::Value *arg2);
+
+  /**
+   * Insert bytecode instruction with 2 arguments into the bytecode stream.
+   * Wrapper that automatically gets the value slots for the LLVM values
+   * provided.
+   */
   Instruction &InsertBytecodeInstruction(const llvm::Instruction *llvm_instruction,
                                          Opcode opcode,
                                          const llvm::Value *arg0,
                                          const llvm::Value *arg1);
+
+  /**
+   * Insert a external call bytecode instruction into the bytecode stream.
+   * @param llvm_instruction LLVM function this instruction is created from.
+   * (Only needed for tracing information, not used in Release mode!)
+   * @param call_context index of the call context created for this external
+   * call instruction
+   * @param function function pointer to the external function
+   * @return Reference to the created instruction in the bytecode stream.
+   */
   ExternalCallInstruction &InsertBytecodeExternalCallInstruction(const llvm::Instruction *llvm_instruction,
                                                                  index_t call_context,
                                                                  void *function);
+
+  /**
+   * Insert a internal call bytecode instruction into the bytecode stream.
+   * @param llvm_instruction LLVM function this instruction is created from.
+   * (Only needed for tracing information, not used in Release mode!)
+   * @param sub_context index to the sub context (interpreter context) created
+   * for this internal call instruction
+   * @param dest_slot Destination slot for the return value. Set zero if
+   * internal function returns void.
+   * @param number_arguments number of arguments provided in this function call.
+   * The internal call instruction has variadic size, depending on the number
+   * of arguments!
+   * @return Reference to the created instruction in the bytecode stream.
+   */
   InternalCallInstruction &InsertBytecodeInternalCallInstruction(const llvm::Instruction *llvm_instruction,
                                                                  index_t sub_context,
                                                                  index_t dest_slot,
                                                                  size_t number_arguments);
 
+
+  /**
+   * Resolves the PHI nodes referring to this basic block, by placing mov
+   * instructions. Must be called just before the terminating LLVM instruction
+   * in basic block. If the PHI swap / lost copy problem can occur, the
+   * function creates additional mov instructions.
+   * @param bb current basic block
+   */
   void ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb);
+
+  // Following functions get called by the
 
   void TranslateBranch(const llvm::Instruction *instruction, std::vector<BytecodeRelocation> &bytecode_relocations);
   void TranslateReturn(const llvm::Instruction *instruction);
