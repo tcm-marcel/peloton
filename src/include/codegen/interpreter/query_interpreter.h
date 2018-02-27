@@ -58,10 +58,10 @@ class QueryInterpreter {
     PL_ASSERT(index >= 0 && index < context_.number_values_);
     *reinterpret_cast<type_t *>(&values_[index]) = value;
 
-#ifdef LOG_TRACE_ENABLED
+#ifdef LOG_DEBUG_ENABLED
     std::ostringstream output;
     output << "  [" << std::dec << std::setw(3) << index << "] <= " << value << "/0x" << std::hex << value;
-    LOG_TRACE("%s", output.str().c_str());
+    printf("%s\n", output.str().c_str());
 #endif
   }
 

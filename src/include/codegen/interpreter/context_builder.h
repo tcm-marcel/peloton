@@ -110,6 +110,12 @@ class ContextBuilder {
   void ValidateRegisterMapping();
 
   /**
+   * Dump the collected liveliness information in csv format
+   * @return string with csv formatted values
+   */
+  std::string DumpValueInformation();
+
+  /**
    * Translates all instructions into bytecode.
    */
   void TranslateFunction();
@@ -206,7 +212,7 @@ class ContextBuilder {
    * @param value LLVM Value
    * @return true, if the given LLVM value is a constant
    */
-  bool IsConstantValue(llvm::Value *value) const;
+  bool IsConstantValue(const llvm::Value *value) const;
 
   /**
    * Extracts the actual constant value of a LLVM constant

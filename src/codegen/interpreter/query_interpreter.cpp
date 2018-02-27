@@ -64,7 +64,7 @@ __attribute__((__noinline__,__noclone__)) void QueryInterpreter::ExecuteFunction
 
 #ifndef NDEBUG
 #define DEBUG_CODE_PRE \
-  LOG_TRACE("%s", context_.Dump(ip).c_str())
+  printf("%s\n", context_.Dump(ip).c_str())
 #else
 #define DEBUG_CODE_PRE
 #endif
