@@ -165,7 +165,8 @@ void QueryInterpreter::InitializeActivationRecord(
 
 uintptr_t QueryInterpreter::AllocateMemory(size_t number_bytes) {
   // allocate memory
-  std::unique_ptr<char[]> pointer = std::make_unique<char[]>(number_bytes);
+  std::unique_ptr<char[]> pointer =
+      std::unique_ptr<char[]>(new char[number_bytes]);
 
   // get raw pointer before moving pointer object!
   auto raw_pointer = reinterpret_cast<uintptr_t>(pointer.get());

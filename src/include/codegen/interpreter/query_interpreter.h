@@ -15,6 +15,7 @@
 #include "codegen/interpreter/interpreter_context.h"
 #include "codegen/query.h"
 #include "common/exception.h"
+#include "common/overflow_builtins.h"
 
 namespace peloton {
 namespace codegen {
@@ -120,12 +121,7 @@ class QueryInterpreter {
     PL_ASSERT(index >= 0 && index < context_.number_values_);
     *reinterpret_cast<type_t *>(&values_[index]) = value;
 
-#ifdef LOG_TRACE_ENABLED
-    std::ostringstream output;
-    output << "  [" << std::dec << std::setw(3) << index << "] <= " << value
-           << "/0x" << std::hex << value;
-    LOG_TRACE("%s", output.str().c_str());
-#endif
+    DumpValue(index);
   }
 
   /**
@@ -166,6 +162,22 @@ class QueryInterpreter {
    * @return pointer to the allocated memory
    */
   uintptr_t AllocateMemory(size_t number_bytes);
+
+/**
+ * Dump the value of the given as value slot for debug purposes.
+ * If LOG_TRACE is not enabled, this function compiles to a stub.
+ * @param index value index of value slot to dump
+ */
+#ifdef LOG_TRACE_ENABLED
+  void DumpValue(index_t index) {
+    std::ostringstream output;
+    output << "  [" << std::dec << std::setw(3) << index << "] <= " << value
+           << "/0x" << std::hex << value;
+    LOG_TRACE("%s", output.str().c_str());
+  }
+#else
+  void DumpValue(UNUSED_ATTRIBUTE index_t index) {}
+#endif
 
   //--------------------------------------------------------------------------//
   //                          Instruction Handlers
@@ -763,24 +775,14 @@ class QueryInterpreter {
              call_activation.return_pointer,
              reinterpret_cast<void **>(call_activation.value_pointers.data()));
 
-#ifdef LOG_TRACE_ENABLED
     if (context_
             .external_call_contexts_[call_instruction->external_call_context]
             .dest_type != &ffi_type_void) {
-      std::ostringstream output;
-      value_t value = GetValue<value_t>(
+      DumpValue(
           context_
               .external_call_contexts_[call_instruction->external_call_context]
               .dest_slot);
-      output << "  [" << std::dec << std::setw(3)
-             << context_
-                    .external_call_contexts_[call_instruction
-                                                 ->external_call_context]
-                    .dest_slot
-             << "] <= " << value << " / 0x" << std::hex << value << ",";
-      LOG_TRACE("%s", output.str().c_str());
     }
-#endif
 
     return AdvanceIP<2>(instruction);  // bigger slot size!
   }

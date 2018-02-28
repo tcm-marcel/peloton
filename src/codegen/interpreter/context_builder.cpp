@@ -123,9 +123,9 @@ Opcode ContextBuilder::GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
 
 template <size_t number_instruction_slots>
 Instruction &ContextBuilder::InsertBytecodeInstruction(
-    UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction, Opcode opcode,
-    index_t arg0, index_t arg1, index_t arg2, index_t arg3, index_t arg4,
-    index_t arg5, index_t arg6) {
+    const llvm::Instruction *llvm_instruction, Opcode opcode, index_t arg0,
+    index_t arg1, index_t arg2, index_t arg3, index_t arg4, index_t arg5,
+    index_t arg6) {
   PL_ASSERT(opcode != Opcode::undefined);
 
   // If one instruction slot is selected, make sure only two arguments are
@@ -145,11 +145,7 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(
   instruction.args[5] = arg5;
   instruction.args[6] = arg6;
 
-#ifndef NDEBUG
-  context_.instruction_trace_.insert(context_.instruction_trace_.end(),
-                                     number_instruction_slots,
-                                     llvm_instruction);
-#endif
+  AddInstructionToTrace(llvm_instruction, number_instruction_slots);
 
   return instruction;
 }
@@ -171,8 +167,8 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(
 }
 
 ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
-    UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
-    index_t call_context, void *function) {
+    const llvm::Instruction *llvm_instruction, index_t call_context,
+    void *function) {
   // calculate number of slots and assert it is 2 (this way we recognise if any
   // size changes)
   const size_t number_slots =
@@ -188,18 +184,15 @@ ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
       reinterpret_cast<void (*)(void)>(function)};
   *reinterpret_cast<ExternalCallInstruction *>(&slot) = instruction;
 
-#ifndef NDEBUG
-  context_.instruction_trace_.insert(context_.instruction_trace_.end(),
-                                     number_slots, llvm_instruction);
-#endif
+  AddInstructionToTrace(llvm_instruction, number_slots);
 
   return reinterpret_cast<ExternalCallInstruction &>(
       context_.bytecode_[context_.bytecode_.size() - number_slots]);
 }
 
 InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(
-    UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
-    index_t sub_context, index_t dest_slot, size_t number_arguments) {
+    const llvm::Instruction *llvm_instruction, index_t sub_context,
+    index_t dest_slot, size_t number_arguments) {
   // calculate number of required instruction slots
   const size_t number_slots =
       ((2 * (4 + number_arguments)) + sizeof(instr_slot_t) - 1) /
@@ -217,12 +210,17 @@ InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(
   PL_ASSERT(&instruction.args[number_arguments - 1] <
             reinterpret_cast<index_t *>(&context_.bytecode_.back() + 1));
 
-#ifndef NDEBUG
-  context_.instruction_trace_.insert(context_.instruction_trace_.end(),
-                                     number_slots, llvm_instruction);
-#endif
+  AddInstructionToTrace(llvm_instruction, number_slots);
 
   return reinterpret_cast<InternalCallInstruction &>(slot);
+}
+
+void ContextBuilder::AddInstructionToTrace(
+    const llvm::Instruction *llvm_instruction,
+    size_t number_instruction_slots) {
+  context_.instruction_trace_.insert(context_.instruction_trace_.end(),
+                                     number_instruction_slots,
+                                     llvm_instruction);
 }
 
 ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(
@@ -286,7 +284,7 @@ value_t ContextBuilder::GetConstantValue(const llvm::Constant *constant) const {
           }
         }
 
-        // fallthrough: more complex pointer types
+        PELOTON_FALLTHROUGH
       }
 
       default:

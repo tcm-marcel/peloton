@@ -358,6 +358,23 @@ class ContextBuilder {
       const llvm::Instruction *llvm_instruction, index_t sub_context,
       index_t dest_slot, size_t number_arguments);
 
+/**
+ * Helper function, that adds the given instruction to the instruction trace.
+ * (Should only be called from InsertBytecode isntructions)
+ * In Release mode this function compiles to a stub.
+ * @param llvm_instruction LLVM instruction the just created bytecode
+ * instruction originates from
+ * @param number_instruction_slots size of the bytecode instruction
+ */
+#ifndef NDEBUG
+  void AddInstructionToTrace(const llvm::Instruction *llvm_instruction,
+                             size_t number_instruction_slots = 1);
+#else
+  void AddInstructionToTrace(
+      UNUSED_ATTRIBUTE const llvm::Instruction *llvm_instruction,
+      UNUSED_ATTRIBUTE size_t number_instruction_slots = 1) {}
+#endif
+
   /**
    * Resolves the PHI nodes referring to this basic block, by placing mov
    * instructions. Must be called just before the terminating LLVM instruction
