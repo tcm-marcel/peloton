@@ -144,6 +144,7 @@ CodeContext::CodeContext()
   int32_type_ = llvm::Type::getInt32Ty(*context_);
   int64_type_ = llvm::Type::getInt64Ty(*context_);
   double_type_ = llvm::Type::getDoubleTy(*context_);
+  float_type_ = llvm::Type::getFloatTy(*context_);
   void_type_ = llvm::Type::getVoidTy(*context_);
   char_ptr_type_ = llvm::Type::getInt8PtrTy(*context_);
 }
