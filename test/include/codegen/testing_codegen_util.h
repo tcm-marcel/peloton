@@ -124,9 +124,6 @@ class PelotonCodeGenTest : public PelotonTest {
   storage::Database *test_db;
 };
 
-PelotonCodeGenTest::CodeGenStats operator+(const PelotonCodeGenTest::CodeGenStats& a, const PelotonCodeGenTest::CodeGenStats& b);
-PelotonCodeGenTest::CodeGenStats operator/(const PelotonCodeGenTest::CodeGenStats& a, double factor);
-
 //===----------------------------------------------------------------------===//
 // A query consumer that prints the tuples to standard out
 //===----------------------------------------------------------------------===//

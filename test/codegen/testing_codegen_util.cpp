@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <codegen/testing_codegen_util.h>
 #include "codegen/testing_codegen_util.h"
 
 #include "catalog/table_catalog.h"
@@ -385,38 +384,6 @@ void Printer::ConsumeResult(codegen::ConsumerContext &ctx,
 
   // Make the printf call
   codegen.CallPrintf(format, cols);
-}
-
-PelotonCodeGenTest::CodeGenStats operator+(const PelotonCodeGenTest::CodeGenStats& a, const PelotonCodeGenTest::CodeGenStats& b) {
-  PelotonCodeGenTest::CodeGenStats stats = a;
-
-  stats.compile_stats.setup_ms += b.compile_stats.setup_ms;
-  stats.compile_stats.optimize_ms += b.compile_stats.optimize_ms;
-  stats.compile_stats.ir_gen_ms += b.compile_stats.ir_gen_ms;
-
-  stats.runtime_stats.bytecode_compile_ms += b.runtime_stats.bytecode_compile_ms;
-  stats.runtime_stats.jit_compile_ms += b.runtime_stats.jit_compile_ms;
-  stats.runtime_stats.init_ms += b.runtime_stats.init_ms;
-  stats.runtime_stats.plan_ms += b.runtime_stats.plan_ms;
-  stats.runtime_stats.tear_down_ms += b.runtime_stats.tear_down_ms;
-
-  return stats;
-}
-
-PelotonCodeGenTest::CodeGenStats operator/(const PelotonCodeGenTest::CodeGenStats& a, double factor) {
-  PelotonCodeGenTest::CodeGenStats stats = a;
-
-  stats.compile_stats.setup_ms /= factor;
-  stats.compile_stats.optimize_ms /= factor;
-  stats.compile_stats.ir_gen_ms /= factor;
-
-  stats.runtime_stats.bytecode_compile_ms /= factor;
-  stats.runtime_stats.jit_compile_ms /= factor;
-  stats.runtime_stats.init_ms /= factor;
-  stats.runtime_stats.plan_ms /= factor;
-  stats.runtime_stats.tear_down_ms /= factor;
-
-  return stats;
 }
 
 }  // namespace test
