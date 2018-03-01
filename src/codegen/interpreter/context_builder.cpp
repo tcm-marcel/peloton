@@ -133,9 +133,10 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(
   PL_ASSERT(number_instruction_slots > 1 ||
             (arg3 == 0 && arg4 == 0 && arg5 == 0 && arg6 == 0));
 
-  instr_slot_t &slot = *context_.bytecode_.insert(context_.bytecode_.end(),
-                                                  number_instruction_slots, 0);
-  Instruction &instruction = *reinterpret_cast<Instruction *>(&slot);
+  context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots,
+                            0);
+  Instruction &instruction = *reinterpret_cast<Instruction *>(
+      &*(context_.bytecode_.end() - number_instruction_slots));
   instruction.op = opcode;
   instruction.args[0] = arg0;
   instruction.args[1] = arg1;
@@ -171,37 +172,39 @@ ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
     void *function) {
   // calculate number of slots and assert it is 2 (this way we recognise if any
   // size changes)
-  const size_t number_slots =
+  const size_t number_instruction_slots =
       (sizeof(ExternalCallInstruction) + sizeof(instr_slot_t) - 1) /
       sizeof(instr_slot_t);
-  PL_ASSERT(number_slots == 2);
+  PL_ASSERT(number_instruction_slots == 2);
 
-  instr_slot_t &slot =
-      *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
+  context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots,
+                            0);
 
   ExternalCallInstruction instruction = {
       Opcode::call_external, call_context,
       reinterpret_cast<void (*)(void)>(function)};
-  *reinterpret_cast<ExternalCallInstruction *>(&slot) = instruction;
+  *reinterpret_cast<ExternalCallInstruction *>(
+      &*(context_.bytecode_.end() - number_instruction_slots)) = instruction;
 
-  AddInstructionToTrace(llvm_instruction, number_slots);
+  AddInstructionToTrace(llvm_instruction, number_instruction_slots);
 
   return reinterpret_cast<ExternalCallInstruction &>(
-      context_.bytecode_[context_.bytecode_.size() - number_slots]);
+      context_.bytecode_[context_.bytecode_.size() - number_instruction_slots]);
 }
 
 InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(
     const llvm::Instruction *llvm_instruction, index_t sub_context,
     index_t dest_slot, size_t number_arguments) {
   // calculate number of required instruction slots
-  const size_t number_slots =
+  const size_t number_instruction_slots =
       ((2 * (4 + number_arguments)) + sizeof(instr_slot_t) - 1) /
       sizeof(instr_slot_t);
 
-  instr_slot_t &slot =
-      *context_.bytecode_.insert(context_.bytecode_.end(), number_slots, 0);
+  context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots,
+                            0);
   InternalCallInstruction &instruction =
-      *reinterpret_cast<InternalCallInstruction *>(&slot);
+      *reinterpret_cast<InternalCallInstruction *>(
+          &*(context_.bytecode_.end() - number_instruction_slots));
   instruction.op = Opcode::call_internal;
   instruction.sub_context = sub_context;
   instruction.dest_slot = dest_slot;
@@ -210,9 +213,10 @@ InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(
   PL_ASSERT(&instruction.args[number_arguments - 1] <
             reinterpret_cast<index_t *>(&context_.bytecode_.back() + 1));
 
-  AddInstructionToTrace(llvm_instruction, number_slots);
+  AddInstructionToTrace(llvm_instruction, number_instruction_slots);
 
-  return reinterpret_cast<InternalCallInstruction &>(slot);
+  return reinterpret_cast<InternalCallInstruction &>(
+      *(context_.bytecode_.end() - number_instruction_slots));
 }
 
 void ContextBuilder::AddInstructionToTrace(
