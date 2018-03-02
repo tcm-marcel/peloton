@@ -219,6 +219,7 @@ InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(
       *(context_.bytecode_.end() - number_instruction_slots));
 }
 
+#ifndef NDEBUG
 void ContextBuilder::AddInstructionToTrace(
     const llvm::Instruction *llvm_instruction,
     size_t number_instruction_slots) {
@@ -226,6 +227,7 @@ void ContextBuilder::AddInstructionToTrace(
                                      number_instruction_slots,
                                      llvm_instruction);
 }
+#endif
 
 ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(
     const llvm::Value *alias, value_index_t value_index) {
