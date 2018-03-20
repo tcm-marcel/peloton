@@ -68,19 +68,19 @@ class ContextBuilder {
   } BytecodeRelocation;
 
   /**
-   * Describes the liveliness of a value (every value that has a value index),
-   * defined by the definition and the last usage, both measured by the
-   * continuous instruction index.
+   * Describes the liveness of a value (every value that has a value index),
+   * defined by start and end instruction index. Usually start is the definition
+   * and end ist the last usage.
    */
-  typedef struct ValueLiveliness {
-    instruction_index_t definition;
-    instruction_index_t last_usage;
-  } Valueliveliness;
+  typedef struct {
+    instruction_index_t start;
+    instruction_index_t end;
+  } ValueLiveness;
 
   /**
    * NULL-value for liveness information
    */
-  static const index_t valueLivelinessUnknown =
+  static const index_t valueLivenessUnknown =
       std::numeric_limits<index_t>::max();
 
  private:
@@ -89,7 +89,7 @@ class ContextBuilder {
 
   /**
    * Analyses the function to collect values and constants and gets
-   * value liveliness information
+   * value liveness information
    */
   void AnalyseFunction();
 
@@ -112,10 +112,10 @@ class ContextBuilder {
   void ValidateRegisterMapping();
 
   /**
-   * Dump the collected liveliness information in csv format
+   * Dump the collected liveness information in csv format for debugging
    * @return string with csv formatted values
    */
-  std::string DumpValueInformation();
+  void DumpValueInformation();
 
   /**
    * Translates all instructions into bytecode.
@@ -129,6 +129,21 @@ class ContextBuilder {
 
  private:
   /**
+   * Create a unique value index for a given LLVM value. This function is meant
+   * to be called only once per LLVM Value.
+   * @param value LLVM Value
+   * @return a new unique value index for this LLVM value
+   */
+  value_index_t CreateValueIndex(const llvm::Value *value, instruction_index_t instruction_index);
+  /**
+   * Get the value index for a given LLVM value. The value index must have been
+   * created with CreateValueIndex before.
+   * @param value LLVM Value
+   * @return the value index that is mapped to this LLVM value
+   */
+  value_index_t GetValueIndex(const llvm::Value *value) const;
+
+  /**
    * Maps a given LLVM value to the same value index as another LLVM Value.
    * @param alias LLVM value
    * @param value_index the value index to map the LLVM value to. The
@@ -137,20 +152,6 @@ class ContextBuilder {
    */
   value_index_t CreateValueAlias(const llvm::Value *alias,
                                  value_index_t value_index);
-  /**
-   * Create a unique value index for a given LLVM value. This function is meant
-   * to be called only once per LLVM Value.
-   * @param value LLVM Value
-   * @return a new unique value index for this LLVM value
-   */
-  value_index_t CreateValueIndex(const llvm::Value *value);
-  /**
-   * Get the value index for a given LLVM value. The value index must have been
-   * created with CreateValueIndex before.
-   * @param value LLVM Value
-   * @return the value index that is mapped to this LLVM value
-   */
-  value_index_t GetValueIndex(const llvm::Value *value) const;
 
   /**
    * Add a LLVM constant to this interpreter context. This function is meant
@@ -175,7 +176,7 @@ class ContextBuilder {
   index_t GetValueSlot(const llvm::Value *value) const;
 
   /**
-   * Adds a definition time to a values liveliness record. This function
+   * Adds a definition time to a values liveness record. This function
    * is meant to be called only once per value. (cmp. SSA property)
    * @param value_index value index identifying the value
    * @param definition instruction index of the definition
@@ -184,12 +185,16 @@ class ContextBuilder {
                           instruction_index_t definition);
 
   /**
-   * Adds a usage time to a values liveliness record. This function can be
+   * Adds a usage time to a values liveness record. This function can be
    * called for every usage, the latest one will be kept.
    * @param value_index value index identifying the value
    * @param usage instruction index of the definition
    */
   void AddValueUsage(value_index_t value_index, instruction_index_t usage);
+
+
+  // TODO
+  void ExtendValueLifetime(value_index_t value_index, ContextBuilder::instruction_index_t instruction_index);
 
   /**
    * Returns the index for a additional temporary value slot in that
@@ -416,9 +421,9 @@ class ContextBuilder {
   std::unordered_map<const llvm::Value *, value_index_t> value_mapping_;
 
   /**
-   * Holds the liveliness of each value (use/def)
+   * Holds the liveness of each value (use/def)
    */
-  std::vector<ValueLiveliness> value_liveliness_;
+  std::vector<ValueLiveness> value_liveness_;
 
   /**
    * Holds the assigned value slot (from register allocation)
@@ -437,7 +442,7 @@ class ContextBuilder {
   std::vector<std::pair<value_t, value_index_t>> constants_;
 
   /**
-   * Maximum instruction index = highest possible liveliness value
+   * Maximum instruction index = highest possible liveness value
    */
   instruction_index_t instruction_index_max_;
 

@@ -15,6 +15,7 @@
 #include "common/exception.h"
 
 #include <llvm/IR/InstIterator.h>
+#include <fstream>
 
 namespace peloton {
 namespace codegen {
@@ -22,7 +23,8 @@ namespace interpreter {
 
 ContextBuilder::ContextBuilder(const CodeContext &code_context,
                                const llvm::Function *function)
-    : number_value_slots_(0),
+    : context_(function->getName().str()),
+      number_value_slots_(0),
       number_temporary_value_slots_(0),
       rpo_traversal_(function),
       code_context_(code_context),
@@ -32,10 +34,22 @@ InterpreterContext ContextBuilder::CreateInterpreterContext(
     const CodeContext &code_context, const llvm::Function *function) {
   ContextBuilder builder(code_context, function);
 
+  // DEBUG
+  code_context.DumpContents();
+
   builder.AnalyseFunction();
   builder.PerformNaiveRegisterAllocation();
+  //builder.PerformGreedyRegisterAllocation();
+  builder.ValidateRegisterMapping();
+
+  // DEBUG
+  builder.DumpValueInformation();
+
   builder.TranslateFunction();
   builder.Finalize();
+
+  // DEBUG
+  builder.context_.DumpContents();
 
   return std::move(builder.context_);
 }
@@ -141,10 +155,13 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(
   instruction.args[0] = arg0;
   instruction.args[1] = arg1;
   instruction.args[2] = arg2;
-  instruction.args[3] = arg3;
-  instruction.args[4] = arg4;
-  instruction.args[5] = arg5;
-  instruction.args[6] = arg6;
+
+  if (number_instruction_slots > 1) {
+    instruction.args[3] = arg3;
+    instruction.args[4] = arg4;
+    instruction.args[5] = arg5;
+    instruction.args[6] = arg6;
+  }
 
   AddInstructionToTrace(llvm_instruction, number_instruction_slots);
 
@@ -229,21 +246,13 @@ void ContextBuilder::AddInstructionToTrace(
 }
 #endif
 
-ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(
-    const llvm::Value *alias, value_index_t value_index) {
-  PL_ASSERT(value_mapping_.find(alias) == value_mapping_.end());
-  value_mapping_[alias] = value_index;
-
-  return value_index;
-}
-
 ContextBuilder::value_index_t ContextBuilder::CreateValueIndex(
-    const llvm::Value *value) {
+    const llvm::Value *value, instruction_index_t instruction_index) {
   PL_ASSERT(value_mapping_.find(value) == value_mapping_.end());
 
-  value_index_t value_index = value_liveliness_.size();
+  value_index_t value_index = value_liveness_.size();
   value_mapping_[value] = value_index;
-  value_liveliness_.push_back({valueLivelinessUnknown, valueLivelinessUnknown});
+  value_liveness_.push_back({instruction_index, instruction_index});
 
   return value_index;
 }
@@ -252,6 +261,14 @@ ContextBuilder::value_index_t ContextBuilder::GetValueIndex(
     const llvm::Value *value) const {
   PL_ASSERT(value_mapping_.find(value) != value_mapping_.end());
   return value_mapping_.at(value);
+}
+
+ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(
+    const llvm::Value *alias, value_index_t value_index) {
+  PL_ASSERT(value_mapping_.find(alias) == value_mapping_.end());
+  value_mapping_[alias] = value_index;
+
+  return value_index;
 }
 
 value_t ContextBuilder::GetConstantValue(const llvm::Constant *constant) const {
@@ -320,11 +337,11 @@ ContextBuilder::value_index_t ContextBuilder::AddConstant(
 
   if (constant_result == constants_.end()) {
     // create new constant with that value
-    value_index = CreateValueIndex(constant);
+    value_index = CreateValueIndex(constant, 0);
     constants_.emplace_back(std::make_pair(value, value_index));
 
-    // constants liveliness starts at program start
-    value_liveliness_[value_index].definition = 0;
+    // constants liveness starts at program start
+    value_liveness_[value_index].definition = 0;
   } else {
     // value already exists, create alias
     value_index = constant_result->second;
@@ -345,18 +362,28 @@ index_t ContextBuilder::GetValueSlot(const llvm::Value *value) const {
 
 void ContextBuilder::AddValueDefinition(
     value_index_t value_index, ContextBuilder::instruction_index_t definition) {
-  PL_ASSERT(value_liveliness_[value_index].definition ==
-            valueLivelinessUnknown);
-  value_liveliness_[value_index].definition = definition;
+  if (value_liveness_[value_index].definition == valueLivenessUnknown)
+    value_liveness_[value_index].definition = definition;
+  else
+    value_liveness_[value_index].definition =
+        std::max(value_liveness_[value_index].definition, definition);
 }
 
 void ContextBuilder::AddValueUsage(value_index_t value_index,
                                    ContextBuilder::instruction_index_t usage) {
-  if (value_liveliness_[value_index].last_usage == valueLivelinessUnknown)
-    value_liveliness_[value_index].last_usage = usage;
+  if (value_liveness_[value_index].last_usage == valueLivenessUnknown)
+    value_liveness_[value_index].last_usage = usage;
   else
-    value_liveliness_[value_index].last_usage =
-        std::max(value_liveliness_[value_index].last_usage, usage);
+    value_liveness_[value_index].last_usage =
+        std::max(value_liveness_[value_index].last_usage, usage);
+}
+
+void ContextBuilder::ExtendValueLifetime(
+    value_index_t value_index, ContextBuilder::instruction_index_t instruction_index) {
+  if (instruction_index < value_liveness_[value_index].definition)
+    value_liveness_[value_index].definition = instruction_index;
+  else if (instruction_index > value_liveness_[value_index].last_usage)
+    value_liveness_[value_index].last_usage = instruction_index;
 }
 
 index_t ContextBuilder::GetTemporaryValueSlot(const llvm::BasicBlock *bb) {
@@ -396,7 +423,7 @@ ffi_type *ContextBuilder::GetFFIType(llvm::Type *type) {
       return &ffi_type_uint64;
 
     default:
-      throw NotSupportedException("can't find a ffi_type for llvm::Type");
+      throw NotSupportedException(std::string("can't find a ffi_type for type: ") + CodeGen::Print(type));
   }
 }
 
@@ -429,22 +456,20 @@ bool ContextBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb,
 }
 
 void ContextBuilder::AnalyseFunction() {
-  std::unordered_map<const llvm::BasicBlock *, index_t>
-      bb_last_instruction_index;
+  std::unordered_map<const llvm::BasicBlock *, std::pair<index_t, index_t>>
+      bb_instruction_index_range;
 
   /* The analyse pass does:
-   * - determine the liveliness of all values
-   *   - every instruction defines a value and uses all its operands,
-   *     extending their liveliness
-   * - merge values of noop instructions
+   * - determine the liveness of all values
+   * - merge values of instructions that translate to nop
    * - merge constants and create list of constants
-   * - extract some additional information, e.g. for overflow aware calls
+   * - extract some additional information, e.g. for overflow aware operations
    */
 
   // Process function arguments
   for (auto &argument : llvm_function_->args()) {
-    value_index_t value_index = CreateValueIndex(&argument);
-    // DEF: function arguments are already defines at function start
+    value_index_t value_index = CreateValueIndex(&argument, 0);
+    // DEF: function arguments are already defined at function start
     AddValueDefinition(value_index, 0);
   }
 
@@ -454,24 +479,100 @@ void ContextBuilder::AnalyseFunction() {
        traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
     const llvm::BasicBlock *bb = *traversal_iterator;
 
-    // Add basic block to rpo vector for pred/succ lookups
+    // Add this basic block to the rpo vector for pred/succ lookups
     bb_reverse_post_order_.push_back(bb);
 
-    // Iterate all instructions to collect the liveliness information
+    bb_instruction_index_range[bb].first = instruction_index;
+
+    // Iterate all instructions to collect the liveness information
     // There are exceptions for several instructions,
     // which are labeled and explained below.
     for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin();
          instr_iterator != bb->end(); ++instr_iterator, ++instruction_index) {
       const llvm::Instruction *instruction = instr_iterator;
 
-      bool is_phi = false;
       bool is_non_zero_gep = false;
-
-      if (instruction->getOpcode() == llvm::Instruction::PHI) is_phi = true;
       if (instruction->getOpcode() == llvm::Instruction::GetElementPtr &&
           !llvm::cast<llvm::GetElementPtrInst>(instruction)
                ->hasAllZeroIndices())
         is_non_zero_gep = true;
+
+
+      // PHI-Handling:
+      // We do not process the PHI instructions directly, but at the end of a
+      // basic block, we process all PHI instructions of the successor blocks,
+      // that refer to the currect basic block. This is the position where we
+      // will insert the mov instructions when we resolve the PHIs later.
+
+      // Skip PHI instructions
+      if (instruction->getOpcode() == llvm::Instruction::PHI) continue;
+
+      // If next instruction is a terminator instruction, process
+      // PHIs of succeeding basic blocks first
+      if (llvm::isa<llvm::TerminatorInst>(instruction)) {
+        bool found_back_edge = false;
+
+        // For all successor basic blocks
+        for (auto succ_iterator = llvm::succ_begin(bb);
+             succ_iterator != llvm::succ_end(bb); ++succ_iterator) {
+
+          // Iterate phi instructions
+          for (llvm::BasicBlock::const_iterator instr_iterator = succ_iterator->begin();
+               auto *phi_instruction =
+                   llvm::dyn_cast<llvm::PHINode>(&*instr_iterator);
+               ++instr_iterator) {
+
+            // we don't know if this is the first time we hit this phi
+            value_index_t value_index;
+            if (value_mapping_.find(phi_instruction) == value_mapping_.end())
+              value_index = CreateValueIndex(phi_instruction, instruction_index);
+            else
+              value_index = GetValueIndex(phi_instruction);
+
+            ExtendValueLifetime(value_index, instruction_index);
+
+            llvm::Value *phi_operand =
+                phi_instruction->getIncomingValueForBlock(bb);
+
+            value_index_t phi_operand_index;
+            if (!IsConstantValue(phi_operand))
+              phi_operand_index = GetValueIndex(phi_operand);
+            else
+              phi_operand_index = AddConstant(llvm::cast<llvm::Constant>(phi_operand));
+
+            ExtendValueLifetime(phi_operand_index,
+                                instruction_index);
+          } // end iterate phi instructions
+
+          // We also use iterating the basic block successors, to find
+          // back edges. If we have see a successor basic block before, it
+          // must be a back edge.
+          if (!found_back_edge) {
+            auto instruction_index_range =
+                bb_instruction_index_range.find(*succ_iterator);
+            if (instruction_index_range != bb_instruction_index_range.end()) {
+
+              // For all values that are live at that time...
+              for (auto &liveness : value_liveness_) {
+                if (liveness.definition < instruction_index_range->second.first
+                    && liveness.last_usage >= instruction_index_range->second.first) {
+
+                  // ...extend livetime of this value to survive back edge
+                  // instruction_index + 1 is the index of the last
+                  // instruction in this basic block
+                  liveness.last_usage = instruction_index + 1;
+                }
+              }
+
+              found_back_edge = true;
+            }
+          }
+        } // end iterate successor basic blocks
+
+        instruction_index++;
+
+        // fall through (continue with terminator instruction)
+      }
 
       // Exception 1: Skip the ExtractValue instructions we already
       // processed in Exception 6
@@ -491,7 +592,7 @@ void ContextBuilder::AnalyseFunction() {
         // fall through
       }
 
-      // USE: Iterate operands of instruction and extend their liveliness
+      // USE: Iterate operands of instruction and extend their liveness
       for (llvm::Instruction::const_op_iterator op_iterator =
                instruction->op_begin();
            op_iterator != instruction->op_end(); ++op_iterator) {
@@ -516,7 +617,7 @@ void ContextBuilder::AnalyseFunction() {
           value_index_t value_index =
               AddConstant(llvm::cast<llvm::Constant>(operand));
 
-          // USE: extend liveliness of constant value
+          // USE: extend liveness of constant value
           AddValueUsage(value_index, instruction_index);
 
           // Exception 4: We extend the lifetime of GEP operands of GEPs
@@ -529,8 +630,7 @@ void ContextBuilder::AnalyseFunction() {
 
           // A BasicBlock may be a label operand, but we don't need to track
           // them
-        } else if (!is_phi &&
-                   (llvm::dyn_cast<llvm::BasicBlock>(operand) == nullptr)) {
+        } else if (llvm::dyn_cast<llvm::BasicBlock>(operand) == nullptr) {
           value_index_t operand_index = GetValueIndex(operand);
           AddValueUsage(operand_index, instruction_index);
         }
@@ -562,7 +662,7 @@ void ContextBuilder::AnalyseFunction() {
         if (function->isDeclaration()) {
           std::string function_name = function->getName().str();
 
-          if (function_name.size() >= 14 &&
+          if (function_name.size() >= 13 &&
               function_name.substr(10, 13) == "with.overflow") {
             // create entry for this call
             overflow_results_mapping_[call_instruction] =
@@ -570,11 +670,10 @@ void ContextBuilder::AnalyseFunction() {
 
             // Find the first ExtractValue instruction referring to this call
             // instruction for result and overflow each and put it in the
-            // value_liveliness vector here. The liveliness of those
-            // instructions
-            // has to be extended to the definition of the call instruction,
-            // and this way we ensure that the vector is sorted by .definition
-            // and we avoid sorting it later.
+            // value_liveness vector here. The liveness of those
+            // instructions has to be extended to the definition of the call
+            // instruction, and this way we ensure that the vector is sorted
+            // by .definition and we avoid sorting it later.
             for (auto *user : call_instruction->users()) {
               auto *extract_instruction =
                   llvm::cast<llvm::ExtractValueInst>(user);
@@ -594,7 +693,7 @@ void ContextBuilder::AnalyseFunction() {
               }
 
               value_index_t extract_value_index =
-                  CreateValueIndex(extract_instruction);
+                  CreateValueIndex(extract_instruction, instruction_index);
               AddValueDefinition(extract_value_index, instruction_index);
             }
 
@@ -607,59 +706,33 @@ void ContextBuilder::AnalyseFunction() {
         }
       }
 
-      // DEF: save the instruction index as the liveliness starting point
+      // DEF: save the instruction index as the liveness starting point
       if (!instruction->getType()->isVoidTy()) {
-        value_index_t value_index = CreateValueIndex(instruction);
+        value_index_t value_index = CreateValueIndex(instruction, instruction_index);
         AddValueDefinition(value_index, instruction_index);
       }
     }
 
-    bb_last_instruction_index[bb] = instruction_index - 1;
+    bb_instruction_index_range[bb].second = instruction_index - 1;
   }
 
   instruction_index_max_ = instruction_index - 1;
-
-  // revisit phi nodes to extend the lifetime of their arguments if necessary
-  // has to be done in second pass, as we need to know the last instruction
-  // index for each basic block
-  for (llvm::ReversePostOrderTraversal<const llvm::Function *>::rpo_iterator
-           traversal_iterator = rpo_traversal_.begin();
-       traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
-    const llvm::BasicBlock *bb = *traversal_iterator;
-    for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin();
-         auto *phi_instruction =
-             llvm::dyn_cast<llvm::PHINode>(&*instr_iterator);
-         ++instr_iterator) {
-      for (llvm::PHINode::const_block_iterator op_iterator =
-               phi_instruction->block_begin();
-           op_iterator != phi_instruction->block_end(); ++op_iterator) {
-        llvm::BasicBlock *phi_bb = *op_iterator;
-        llvm::Value *phi_value =
-            phi_instruction->getIncomingValueForBlock(phi_bb);
-
-        if (IsConstantValue(phi_value)) continue;
-
-        AddValueUsage(GetValueIndex(phi_value),
-                      bb_last_instruction_index[phi_bb]);
-      }
-    }
-  }
 }
 
 void ContextBuilder::PerformNaiveRegisterAllocation() {
-  // assign a value slot to every liveliness range in value_liveliness_
-  value_slots_.resize(value_liveliness_.size(), 0);
+  // assign a value slot to every liveness range in value_liveness_
+  value_slots_.resize(value_liveness_.size(), 0);
 
-  // it is not worth removing entries from values that are never used,
+  // It is not worth removing entries from values that are never used,
   // so we simply skip them when iterating (if .last_usage = unknown)
   // and they have dummy slot 0 assigned
 
   index_t reg = 0;
 
   // iterate over other entries, which are already sorted
-  for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
+  for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
     // skip values that start at zero or that are never used
-    if (value_liveliness_[i].last_usage == valueLivelinessUnknown) continue;
+    if (value_liveness_[i].last_usage == valueLivenessUnknown) continue;
 
     value_slots_[i] = reg++ + 1;  // + 1 because 0 is dummy slot
   }
@@ -668,21 +741,21 @@ void ContextBuilder::PerformNaiveRegisterAllocation() {
 }
 
 void ContextBuilder::PerformGreedyRegisterAllocation() {
-  // assign a value slot to every liveliness range in value_liveliness_
+  // assign a value slot to every liveness range in value_liveness_
 
-  value_slots_.resize(value_liveliness_.size(), 0);
-  std::vector<ValueLiveliness> registers;
+  value_slots_.resize(value_liveness_.size(), 0);
+  std::vector<ValueLiveness> registers;
 
-  auto findEmptyRegister = [&registers](ValueLiveliness liveliness) {
+  auto findEmptyRegister = [&registers](ValueLiveness liveness) {
     for (index_t i = 0; i < registers.size(); ++i) {
-      if (registers[i].last_usage <= liveliness.definition) {
-        registers[i] = liveliness;
+      if (registers[i].last_usage <= liveness.definition) {
+        registers[i] = liveness;
         return i;
       }
     }
 
     // no empty register found, create new one
-    registers.push_back(liveliness);
+    registers.push_back(liveness);
     return static_cast<index_t>(registers.size() - 1);
   };
 
@@ -690,15 +763,15 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
   // so we simply skip them when iterating (if .last_usage = unknown)
   // and they have dummy slot 0 assigned
 
-  // the vector value_liveliness_ is already sorted by .definition
+  // the vector value_liveness_ is already sorted by .definition
   // except for the constant values. so we just iterate it and pick out
   // the entries with .definition = 0 manually
 
   // get all entries with .definition = 0
-  for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
-    if (value_liveliness_[i].definition == 0 &&
-        value_liveliness_[i].last_usage != valueLivelinessUnknown) {
-      registers.push_back(value_liveliness_[i]);
+  for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
+    if (value_liveness_[i].definition == 0 &&
+        value_liveness_[i].last_usage != valueLivenessUnknown) {
+      registers.push_back(value_liveness_[i]);
       value_slots_[i] =
           registers.size() - 1 + 1;  // + 1 because 0 is dummy slot
     }
@@ -711,18 +784,18 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
 #endif
 
   // iterate over other entries, which are already sorted
-  for (value_index_t i = 0; i < value_liveliness_.size(); ++i) {
+  for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
     // skip values that start at zero or that are never used
-    if (value_liveliness_[i].definition == 0 ||
-        value_liveliness_[i].last_usage == valueLivelinessUnknown)
+    if (value_liveness_[i].definition == 0 ||
+        value_liveness_[i].last_usage == valueLivenessUnknown)
       continue;
 
 #ifndef NDEBUG
-    PL_ASSERT(value_liveliness_[i].definition >= instruction_index);
-    instruction_index = value_liveliness_[i].definition;
+    PL_ASSERT(value_liveness_[i].definition >= instruction_index);
+    instruction_index = value_liveness_[i].definition;
 #endif
 
-    value_slots_[i] = findEmptyRegister(value_liveliness_[i]) +
+    value_slots_[i] = findEmptyRegister(value_liveness_[i]) +
                       1;  // + 1 because 0 is dummy slot
   }
 
@@ -743,15 +816,15 @@ void ContextBuilder::ValidateRegisterMapping() {
     slot_occupied[number_value_slots_ * time + slot] = true;
   };
 
-  PL_ASSERT(value_slots_.size() == value_liveliness_.size());
+  PL_ASSERT(value_slots_.size() == value_liveness_.size());
 
   // iterate over all livetimes and out them in the array
-  for (size_t i = 0; i < value_liveliness_.size(); i++) {
+  for (size_t i = 0; i < value_liveness_.size(); i++) {
     index_t slot = value_slots_[i];
     if (slot == 0) continue;
 
-    for (instruction_index_t time = value_liveliness_[i].definition;
-         time < value_liveliness_[i].last_usage; time++) {
+    for (instruction_index_t time = value_liveness_[i].definition;
+         time < value_liveness_[i].last_usage; time++) {
       // check if the range in this register is not occupied by anyone else
       if (get(slot, time) != false)
         throw Exception("register mapping is inavlid");
@@ -760,19 +833,23 @@ void ContextBuilder::ValidateRegisterMapping() {
   }
 }
 
-std::string ContextBuilder::DumpValueInformation() {
-  // This function dumps the value liveliness and the register allocation
+void ContextBuilder::DumpValueInformation() {
+  // This function dumps the value liveness and the register allocation
   // in csv format for debugging purposes: every instruction_index is one row,
   // every value index is one column.
 
-  std::string output = "index;instruction;";
+  std::ofstream output;
+  output.open(std::string("dump") + context_.function_name_ + "_value_information.csv");
+
+  output << "index;instruction;";
   std::string row;
 
-  for (size_t i = 0; i < value_liveliness_.size(); i++) {
-    output += std::to_string(i) + ";";
+
+  for (size_t i = 0; i < value_liveness_.size(); i++) {
+    output << i << ";";
     row += "-;";
   }
-  output += "\n";
+  output << "\n";
 
   // dump for every instruction index
   instruction_index_t instruction_index = 0;
@@ -781,79 +858,97 @@ std::string ContextBuilder::DumpValueInformation() {
        traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
     const llvm::BasicBlock *bb = *traversal_iterator;
 
-    output += ";" + bb->getName().str() + ":;" + row + "\n";
+    output << ";" << bb->getName().str() << ":;" << row << "\n";
 
     for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin();
          instr_iterator != bb->end(); ++instr_iterator, ++instruction_index) {
       const llvm::Instruction *instruction = instr_iterator;
 
-      output += std::to_string(instruction_index) + ";" +
-                CodeGen::Print(instruction) + ";";
+      // DEBUG
+      // if next instruction is terminator instruction, process phi's first
+      if (llvm::isa<llvm::TerminatorInst>(instruction)) {
+        output << instruction_index << ";phi-moves;";
+
+        // for every value index, print if its live or not
+        for (size_t i = 0; i < value_liveness_.size(); i++) {
+          if (instruction_index >= value_liveness_[i].definition &&
+              instruction_index <= value_liveness_[i].last_usage)
+            output << "L;";
+          else
+            output << ";";
+        }
+        output << "\n";
+
+        instruction_index++;
+      }
+
+      output << instruction_index << ";" <<
+                CodeGen::Print(instruction) << ";";
 
       // for every value index, print if its live or not
-      for (size_t i = 0; i < value_liveliness_.size(); i++) {
-        if (instruction_index >= value_liveliness_[i].definition &&
-            instruction_index <= value_liveliness_[i].last_usage)
-          output += "L;";
+      for (size_t i = 0; i < value_liveness_.size(); i++) {
+        if (instruction_index >= value_liveness_[i].definition &&
+            instruction_index <= value_liveness_[i].last_usage)
+          output << "L;";
         else
-          output += ";";
+          output << ";";
       }
-      output += "\n";
+      output << "\n";
     }
   }
 
   // add additional information for the values under each column
   // 1. print value index
-  output += ";value index:;";
-  for (size_t i = 0; i < value_liveliness_.size(); i++) {
-    if (value_liveliness_[i].last_usage < valueLivelinessUnknown)
-      output += std::to_string(i);
-    output += ";";
+  output << ";value index:;";
+  for (size_t i = 0; i < value_liveness_.size(); i++) {
+    if (value_liveness_[i].last_usage < valueLivenessUnknown)
+      output << i;
+    output << ";";
   }
-  output += "\n";
+  output << "\n";
 
   // 2. print value slot
-  output += ";value slot:;";
-  for (size_t i = 0; i < value_liveliness_.size(); i++) {
-    if (value_liveliness_[i].last_usage < valueLivelinessUnknown)
-      output += std::to_string(value_slots_[i]);
-    output += ";";
+  output << ";value slot:;";
+  for (size_t i = 0; i < value_liveness_.size(); i++) {
+    if (value_liveness_[i].last_usage < valueLivenessUnknown)
+      output << value_slots_[i];
+    output << ";";
   }
-  output += "\n";
+  output << "\n";
 
   // 3. print value definition
-  output += ";definition:;";
-  for (size_t i = 0; i < value_liveliness_.size(); i++) {
-    if (value_liveliness_[i].last_usage < valueLivelinessUnknown)
-      output += std::to_string(value_liveliness_[i].definition);
-    output += ";";
+  output << ";definition:;";
+  for (size_t i = 0; i < value_liveness_.size(); i++) {
+    if (value_liveness_[i].last_usage < valueLivenessUnknown)
+      output << value_liveness_[i].definition;
+    output << ";";
   }
-  output += "\n";
+  output << "\n";
 
   // 4. print value last usage
-  output += ";last usage:;";
-  for (size_t i = 0; i < value_liveliness_.size(); i++) {
-    if (value_liveliness_[i].last_usage < valueLivelinessUnknown)
-      output += std::to_string(value_liveliness_[i].last_usage);
-    output += ";";
+  output << ";last usage:;";
+  for (size_t i = 0; i < value_liveness_.size(); i++) {
+    if (value_liveness_[i].last_usage < valueLivenessUnknown)
+      output << value_liveness_[i].last_usage;
+    output << ";";
   }
-  output += "\n";
+  output << "\n";
 
   // 5. print mapped LLVM values
-  output += ";mapped LLVM  values:;";
-  for (size_t i = 0; i < value_liveliness_.size(); i++) {
-    if (value_liveliness_[i].last_usage < valueLivelinessUnknown) {
+  output << ";mapped LLVM  values:;";
+  for (size_t i = 0; i < value_liveness_.size(); i++) {
+    if (value_liveness_[i].last_usage < valueLivenessUnknown) {
       for (auto &mapping : value_mapping_) {
         if (mapping.second == i) {
-          output += CodeGen::Print(mapping.first) + ", ";
+          output << CodeGen::Print(mapping.first) << ", ";
         }
       }
     }
-    output += ";";
+    output << ";";
   }
-  output += "\n";
+  output << "\n";
 
-  return output;
+  output.close();
 }
 
 void ContextBuilder::TranslateFunction() {
@@ -1308,9 +1403,8 @@ void ContextBuilder::TranslateGetElementPtr(
   // The offset is an immediate constant, not a slot index
   // instruction is created here, but offset will be filled in later,
   // because we may merge it with constant array accesses
-  auto &gep_offset_bytecode_instruction = InsertBytecodeInstruction(
-      gep_instruction, Opcode::gep_offset, GetValueSlot(gep_instruction),
-      GetValueSlot(gep_instruction->getPointerOperand()), 0);
+  auto &gep_offset_bytecode_instruction_ref = InsertBytecodeInstruction(gep_instruction, Opcode::gep_offset, GetValueSlot(gep_instruction), GetValueSlot(gep_instruction->getPointerOperand()), 0);
+  size_t gep_offset_bytecode_instruction_index = context_.GetIndexFromIP(&gep_offset_bytecode_instruction_ref);
 
   // First index operand of the instruction is the array index for the
   // source type
@@ -1387,7 +1481,8 @@ void ContextBuilder::TranslateGetElementPtr(
 
   // fill in calculated overall offset in previously placed gep_offset
   // bytecode instruction
-  gep_offset_bytecode_instruction.args[2] =
+  // (use index instead of reference, as vector may has been relocated!)
+  reinterpret_cast<Instruction *>(&context_.bytecode_[gep_offset_bytecode_instruction_index])->args[2] =
       static_cast<index_t>(overall_offset);
 }
 
@@ -1399,7 +1494,7 @@ void ContextBuilder::TranslateFloatIntCast(
   // floating point type and the other way round.
   // We can only expand instructions in one dimension, so we expand the
   // integer dimension and create the floating point instances manually
-  // (naming: float and double)
+  // (float and double)
 
   Opcode opcode = Opcode::undefined;
 
@@ -1604,7 +1699,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
     // intrinsic) is to check the function name string
     std::string function_name = function->getName().str();
 
-    if (function_name.size() >= 12 &&
+    if (function_name.size() >= 11 &&
         function_name.substr(0, 11) == "llvm.memcpy") {
       if (call_instruction->getOperand(2)->getType() !=
           code_context_.int64_type_)
@@ -1616,7 +1711,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.size() >= 13 &&
+    } else if (function_name.size() >= 12 &&
                function_name.substr(0, 12) == "llvm.memmove") {
       if (call_instruction->getOperand(2)->getType() !=
           code_context_.int64_type_)
@@ -1628,7 +1723,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.size() >= 12 &&
+    } else if (function_name.size() >= 11 &&
                function_name.substr(0, 11) == "llvm.memset") {
       if (call_instruction->getOperand(2)->getType() !=
           code_context_.int64_type_)
@@ -1640,7 +1735,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
                                 call_instruction->getOperand(1),
                                 call_instruction->getOperand(2));
 
-    } else if (function_name.size() >= 14 &&
+    } else if (function_name.size() >= 13 &&
                function_name.substr(10, 13) == "with.overflow") {
       index_t result = 0;
       index_t overflow = 0;
@@ -1686,7 +1781,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
           GetValueSlot(call_instruction->getOperand(0)),
           GetValueSlot(call_instruction->getOperand(1)));
 
-    } else if (function_name.size() >= 27 &&
+    } else if (function_name.size() >= 26 &&
                function_name.substr(0, 26) == "llvm.x86.sse42.crc32.64.64") {
       if (call_instruction->getType() != code_context_.int64_type_)
         throw NotSupportedException(

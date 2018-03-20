@@ -13,6 +13,9 @@
 #include "codegen/interpreter/query_interpreter.h"
 #include "codegen/interpreter/interpreter_context.h"
 
+// DEBUG
+#define LOG_TRACE_ENABLED
+
 namespace peloton {
 namespace codegen {
 namespace interpreter {
@@ -85,25 +88,25 @@ QueryInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
 // it will be over 13kB in the resulting binary!
 //--------------------------------------------------------------------------//
 
-#ifndef NDEBUG
-#define DEBUG_CODE_PRE LOG_TRACE("%s", context_.Dump(ip).c_str())
+#ifdef LOG_TRACE_ENABLED
+#define TRACE_CODE_PRE LOG_TRACE("%s", context_.Dump(ip).c_str())
 #else
-#define DEBUG_CODE_PRE
+#define TRACE_CODE_PRE
 #endif
 
 #define HANDLE_RET_INST(op)                                       \
   _ret:                                                           \
-  DEBUG_CODE_PRE;                                                 \
+  TRACE_CODE_PRE;                                                 \
   GetValueReference<value_t>(0) = GetValue<value_t>(ip->args[0]); \
   return;
 
 #define HANDLE_TYPED_INST(op, type) \
-  _##op##_##type : DEBUG_CODE_PRE;  \
+  _##op##_##type : TRACE_CODE_PRE;  \
   ip = op##Handler<type>(ip);       \
   INTERPRETER_DISPATCH_GOTO(ip);
 
 #define HANDLE_INST(op)   \
-  _##op : DEBUG_CODE_PRE; \
+  _##op : TRACE_CODE_PRE; \
   ip = op##Handler(ip);   \
   INTERPRETER_DISPATCH_GOTO(ip);
 
@@ -178,3 +181,7 @@ uintptr_t QueryInterpreter::AllocateMemory(size_t number_bytes) {
 }  // namespace interpreter
 }  // namespace codegen
 }  // namespace peloton
+
+
+// DEBUG
+#undef LOG_TRACE_ENABLED

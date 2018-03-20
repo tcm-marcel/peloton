@@ -13,10 +13,10 @@
 #include "codegen/interpreter/interpreter_context.h"
 #include "codegen/codegen.h"
 
-#include <include/codegen/interpreter/interpreter_context.h>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <fstream>
 
 namespace peloton {
 namespace codegen {
@@ -72,8 +72,9 @@ size_t InterpreterContext::GetInstructionSlotSize(
   }
 }
 
-std::string InterpreterContext::DumpContents() const {
-  std::ostringstream output;
+void InterpreterContext::DumpContents() const {
+  std::ofstream output;
+  output.open(std::string("dump") + function_name_ + ".bf");
 
 #ifndef NDEBUG
   const llvm::BasicBlock *bb;
@@ -109,7 +110,7 @@ std::string InterpreterContext::DumpContents() const {
 
   output << std::endl;
 
-  return output.str();
+  output.close();
 }
 
 std::string InterpreterContext::Dump(const Instruction *instruction) const {

@@ -121,7 +121,7 @@ class QueryInterpreter {
     PL_ASSERT(index >= 0 && index < context_.number_values_);
     *reinterpret_cast<type_t *>(&values_[index]) = value;
 
-    DumpValue(index);
+    DumpValue<type_t>(index);
   }
 
   /**
@@ -169,14 +169,16 @@ class QueryInterpreter {
  * @param index value index of value slot to dump
  */
 #ifdef LOG_TRACE_ENABLED
-  void DumpValue(index_t index) {
+  template <typename type_t>
+  void DumpValue(const index_t index) {
     std::ostringstream output;
-    output << "  [" << std::dec << std::setw(3) << index << "] <= " << value
-           << "/0x" << std::hex << value;
+    output << "  [" << std::dec << std::setw(3) << index << "] <= " << GetValue<type_t>(index)
+           << "/0x" << std::hex << GetValue<type_t>(index);
     LOG_TRACE("%s", output.str().c_str());
   }
 #else
-  void DumpValue(UNUSED_ATTRIBUTE index_t index) {}
+  template <typename type_t>
+  void DumpValue(UNUSED_ATTRIBUTE const index_t index) {}
 #endif
 
   //--------------------------------------------------------------------------//
@@ -727,7 +729,7 @@ class QueryInterpreter {
   ALWAYS_INLINE inline const Instruction *gep_offsetHandler(
       const Instruction *instruction) {
     uintptr_t sum =
-        GetValue<uintptr_t>(instruction->args[1]) + instruction->args[2];
+        GetValue<uintptr_t>(instruction->args[1]) + static_cast<uintptr_t>(instruction->args[2]);
     SetValue<uintptr_t>(instruction->args[0], (sum));
     return AdvanceIP<1>(instruction);
   }
@@ -778,7 +780,7 @@ class QueryInterpreter {
     if (context_
             .external_call_contexts_[call_instruction->external_call_context]
             .dest_type != &ffi_type_void) {
-      DumpValue(
+      DumpValue<value_t>(
           context_
               .external_call_contexts_[call_instruction->external_call_context]
               .dest_slot);
@@ -872,6 +874,9 @@ class QueryInterpreter {
         GetValue<type_t>(instruction->args[2]),
         GetValue<type_t>(instruction->args[3]),
         &GetValueReference<type_t>(instruction->args[0]));
+
+    DumpValue<type_t>(instruction->args[0]);
+
     SetValue<value_t>(instruction->args[1], (static_cast<value_t>(overflow)));
     return AdvanceIP<2>(instruction);
   }
@@ -886,6 +891,9 @@ class QueryInterpreter {
         GetValue<type_signed_t>(instruction->args[2]),
         GetValue<type_signed_t>(instruction->args[3]),
         &GetValueReference<type_signed_t>(instruction->args[0]));
+
+    DumpValue<type_t>(instruction->args[0]);
+
     SetValue<value_t>(instruction->args[1], (static_cast<value_t>(overflow)));
     return AdvanceIP<2>(instruction);
   }
@@ -899,6 +907,9 @@ class QueryInterpreter {
         GetValue<type_t>(instruction->args[2]),
         GetValue<type_t>(instruction->args[3]),
         &GetValueReference<type_t>(instruction->args[0]));
+
+    DumpValue<type_t>(instruction->args[0]);
+
     SetValue<value_t>(instruction->args[1], (static_cast<value_t>(overflow)));
     return AdvanceIP<2>(instruction);
   }
@@ -913,6 +924,9 @@ class QueryInterpreter {
         GetValue<type_signed_t>(instruction->args[2]),
         GetValue<type_signed_t>(instruction->args[3]),
         &GetValueReference<type_signed_t>(instruction->args[0]));
+
+    DumpValue<type_t>(instruction->args[0]);
+
     SetValue<value_t>(instruction->args[1], (static_cast<value_t>(overflow)));
     return AdvanceIP<2>(instruction);
   }
@@ -926,6 +940,9 @@ class QueryInterpreter {
         GetValue<type_t>(instruction->args[2]),
         GetValue<type_t>(instruction->args[3]),
         &GetValueReference<type_t>(instruction->args[0]));
+
+    DumpValue<type_t>(instruction->args[0]);
+
     SetValue<value_t>(instruction->args[1], (static_cast<value_t>(overflow)));
     return AdvanceIP<2>(instruction);
   }
@@ -940,6 +957,9 @@ class QueryInterpreter {
         GetValue<type_signed_t>(instruction->args[2]),
         GetValue<type_signed_t>(instruction->args[3]),
         &GetValueReference<type_signed_t>(instruction->args[0]));
+
+    DumpValue<type_t>(instruction->args[0]);
+
     SetValue<value_t>(instruction->args[1], (static_cast<value_t>(overflow)));
     return AdvanceIP<2>(instruction);
   }
@@ -994,3 +1014,6 @@ class QueryInterpreter {
 }  // namespace interpreter
 }  // namespace codegen
 }  // namespace peloton
+
+// DEBUG
+#undef LOG_TRACE_ENABLED

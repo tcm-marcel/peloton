@@ -29,7 +29,14 @@ namespace peloton {
 //===--------------------------------------------------------------------===//
 
 #define NEVER_INLINE __attribute__((noinline))
+
+// DEBUG
+#ifdef NDEBUG
 #define ALWAYS_INLINE __attribute__((always_inline))
+#else
+#define ALWAYS_INLINE
+#endif
+
 #define UNUSED_ATTRIBUTE __attribute__((unused))
 #define PACKED __attribute__((packed))
 
@@ -179,6 +186,5 @@ namespace peloton {
 #else
 #define PELOTON_FALLTHROUGH
 #endif
-
 
 }  // namespace peloton

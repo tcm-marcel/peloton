@@ -204,10 +204,10 @@ class InterpreterContext {
   }
 
   /***
-   * Dump the bytecode and the constants of this interpreter context
-   * @return string containing the dumped information
+   * Dumps the bytecode and the constants of this interpreter context to a
+   * file, identified by function name.
    */
-  std::string DumpContents() const;
+  void DumpContents() const;
 
   /**
    * Gives a textual representation of the given instruction. (and the
@@ -218,9 +218,19 @@ class InterpreterContext {
   std::string Dump(const Instruction *instruction) const;
 
  private:
-  InterpreterContext() {}
+  /**
+   * Creates a new empty interpreter context object.
+   * @param id identifier for this interpreter context, usually inherited
+   * from code context.
+   */
+  InterpreterContext(std::string function_name) : function_name_(function_name) {}
 
  private:
+  /**
+   * Function name of the original function (used only for output).
+   */
+  std::string function_name_;
+
   /**
    * Number of needed value slots at runtime.
    */
