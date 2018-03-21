@@ -44,20 +44,20 @@ TEST_F(OverflowBuiltinsTest, UnsignedAddTest) {
   EXPECT_EQ(c, 0);
   EXPECT_EQ(overflow, false);
 
-  overflow = builtin_add_overflow<unsigned_t>(max-12, 3, &c);
-  EXPECT_EQ(c, max-9);
+  overflow = builtin_add_overflow<unsigned_t>(max - 12, 3, &c);
+  EXPECT_EQ(c, max - 9);
   EXPECT_EQ(overflow, false);
 
-  overflow = builtin_add_overflow<unsigned_t>(max-12, 12, &c);
+  overflow = builtin_add_overflow<unsigned_t>(max - 12, 12, &c);
   EXPECT_EQ(c, max);
   EXPECT_EQ(overflow, false);
 
-  overflow = builtin_add_overflow<unsigned_t>(max-12, 13, &c);
+  overflow = builtin_add_overflow<unsigned_t>(max - 12, 13, &c);
   EXPECT_EQ(c, min);
   EXPECT_EQ(overflow, true);
 
-  overflow = builtin_add_overflow<unsigned_t>(max-12, 21, &c);
-  EXPECT_EQ(c, min+8);
+  overflow = builtin_add_overflow<unsigned_t>(max - 12, 21, &c);
+  EXPECT_EQ(c, min + 8);
   EXPECT_EQ(overflow, true);
 }
 
@@ -69,7 +69,7 @@ TEST_F(OverflowBuiltinsTest, SignedAddTest) {
   bool overflow;
 
   overflow = builtin_add_overflow<signed_t>(min, 3, &c);
-  EXPECT_EQ(c, min+3);
+  EXPECT_EQ(c, min + 3);
   EXPECT_EQ(overflow, false);
 
   overflow = builtin_add_overflow<signed_t>(min, 0, &c);
@@ -112,20 +112,20 @@ TEST_F(OverflowBuiltinsTest, UnsignedSubTest) {
   EXPECT_EQ(c, 0);
   EXPECT_EQ(overflow, false);
 
-  overflow = builtin_sub_overflow<unsigned_t>(min+12, 3, &c);
-  EXPECT_EQ(c, min+9);
+  overflow = builtin_sub_overflow<unsigned_t>(min + 12, 3, &c);
+  EXPECT_EQ(c, min + 9);
   EXPECT_EQ(overflow, false);
 
-  overflow = builtin_sub_overflow<unsigned_t>(min+12, 12, &c);
+  overflow = builtin_sub_overflow<unsigned_t>(min + 12, 12, &c);
   EXPECT_EQ(c, min);
   EXPECT_EQ(overflow, false);
 
-  overflow = builtin_sub_overflow<unsigned_t>(min+12, 13, &c);
+  overflow = builtin_sub_overflow<unsigned_t>(min + 12, 13, &c);
   EXPECT_EQ(c, max);
   EXPECT_EQ(overflow, true);
 
-  overflow = builtin_sub_overflow<unsigned_t>(min+12, 15, &c);
-  EXPECT_EQ(c, max-2);
+  overflow = builtin_sub_overflow<unsigned_t>(min + 12, 15, &c);
+  EXPECT_EQ(c, max - 2);
   EXPECT_EQ(overflow, true);
 }
 
@@ -136,7 +136,7 @@ TEST_F(OverflowBuiltinsTest, SignedSubTest) {
   signed_t c;
   bool overflow;
 
-  overflow = builtin_sub_overflow<signed_t>(min+3, 3, &c);
+  overflow = builtin_sub_overflow<signed_t>(min + 3, 3, &c);
   EXPECT_EQ(c, min);
   EXPECT_EQ(overflow, false);
 
@@ -186,7 +186,7 @@ TEST_F(OverflowBuiltinsTest, UnsignedMulTest) {
 
 TEST_F(OverflowBuiltinsTest, SignedMulTest) {
   signed_t max = std::numeric_limits<signed_t>::max();
-  //signed_t min = std::numeric_limits<signed_t>::min();
+  // signed_t min = std::numeric_limits<signed_t>::min();
 
   signed_t c;
   bool overflow;
