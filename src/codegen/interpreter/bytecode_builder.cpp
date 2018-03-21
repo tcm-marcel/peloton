@@ -2,15 +2,15 @@
 //
 //                         Peloton
 //
-// context_builder.cpp
+// bytecode_builder.cpp
 //
-// Identification: src/codegen/interpreter/context_builder.cpp
+// Identification: src/codegen/interpreter/bytecode_builder.cpp
 //
 // Copyright (c) 2015-2018, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
 
-#include "codegen/interpreter/context_builder.h"
+#include "codegen/interpreter/bytecode_builder.h"
 #include "codegen/codegen.h"
 #include "common/exception.h"
 
@@ -21,114 +21,113 @@ namespace peloton {
 namespace codegen {
 namespace interpreter {
 
-ContextBuilder::ContextBuilder(const CodeContext &code_context,
+BytecodeBuilder::BytecodeBuilder(const CodeContext &code_context,
                                const llvm::Function *function)
-    : context_(function->getName().str()),
+    : bytecode_function_(function->getName().str()),
       number_value_slots_(0),
       number_temporary_value_slots_(0),
       rpo_traversal_(function),
       code_context_(code_context),
       llvm_function_(function) {}
 
-InterpreterContext ContextBuilder::CreateInterpreterContext(
+BytecodeFunction BytecodeBuilder::CreateBytecodeFunction(
     const CodeContext &code_context, const llvm::Function *function) {
-  ContextBuilder builder(code_context, function);
+  BytecodeBuilder builder(code_context, function);
 
   // DEBUG
-  code_context.DumpContents();
+  //code_context.DumpContents();
 
   builder.AnalyseFunction();
-  builder.PerformNaiveRegisterAllocation();
-  //builder.PerformGreedyRegisterAllocation();
-  builder.ValidateRegisterMapping();
+  //builder.PerformNaiveRegisterAllocation();
+  builder.PerformGreedyRegisterAllocation();
 
   // DEBUG
-  builder.DumpValueInformation();
+  //builder.DumpValueInformation();
 
   builder.TranslateFunction();
   builder.Finalize();
 
   // DEBUG
-  builder.context_.DumpContents();
+  //builder.bytecode_function_.DumpContents();
 
-  return std::move(builder.context_);
+  return std::move(builder.bytecode_function_);
 }
 
-Opcode ContextBuilder::GetOpcodeForTypeAllTypes(Opcode untyped_op,
+Opcode BytecodeBuilder::GetOpcodeForTypeAllTypes(Opcode untyped_op,
                                                 llvm::Type *type) const {
-  index_t id = InterpreterContext::GetOpcodeId(untyped_op);
+  index_t id = BytecodeFunction::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
 
   if (type == code_context_.bool_type_ || type == code_context_.int8_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 0);
+    return BytecodeFunction::GetOpcodeFromId(id + 0);
   else if (type == code_context_.int16_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 1);
+    return BytecodeFunction::GetOpcodeFromId(id + 1);
   else if (type == code_context_.int32_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 2);
+    return BytecodeFunction::GetOpcodeFromId(id + 2);
   else if (type == code_context_.int64_type_ ||
            type == code_context_.char_ptr_type_ || type->isPointerTy())
-    return InterpreterContext::GetOpcodeFromId(id + 3);
+    return BytecodeFunction::GetOpcodeFromId(id + 3);
   else if (type == code_context_.float_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 4);
+    return BytecodeFunction::GetOpcodeFromId(id + 4);
   else if (type == code_context_.double_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 5);
+    return BytecodeFunction::GetOpcodeFromId(id + 5);
   else
     throw NotSupportedException("llvm type not supported: " +
                                 CodeGen::Print(type));
 }
 
-Opcode ContextBuilder::GetOpcodeForTypeIntTypes(Opcode untyped_op,
+Opcode BytecodeBuilder::GetOpcodeForTypeIntTypes(Opcode untyped_op,
                                                 llvm::Type *type) const {
-  index_t id = InterpreterContext::GetOpcodeId(untyped_op);
+  index_t id = BytecodeFunction::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
 
   if (type == code_context_.bool_type_ || type == code_context_.int8_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 0);
+    return BytecodeFunction::GetOpcodeFromId(id + 0);
   else if (type == code_context_.int16_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 1);
+    return BytecodeFunction::GetOpcodeFromId(id + 1);
   else if (type == code_context_.int32_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 2);
+    return BytecodeFunction::GetOpcodeFromId(id + 2);
   else if (type == code_context_.int64_type_ ||
            type == code_context_.char_ptr_type_ || type->isPointerTy())
-    return InterpreterContext::GetOpcodeFromId(id + 3);
+    return BytecodeFunction::GetOpcodeFromId(id + 3);
   else
     throw NotSupportedException("llvm type not supported: " +
                                 CodeGen::Print(type));
 }
 
-Opcode ContextBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
+Opcode BytecodeBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
                                                   llvm::Type *type) const {
-  index_t id = InterpreterContext::GetOpcodeId(untyped_op);
+  index_t id = BytecodeFunction::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
 
   // float is missing!
   if (type == code_context_.float_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 0);
+    return BytecodeFunction::GetOpcodeFromId(id + 0);
   if (type == code_context_.double_type_)
-    return InterpreterContext::GetOpcodeFromId(id + 1);
+    return BytecodeFunction::GetOpcodeFromId(id + 1);
   else
     throw NotSupportedException("llvm type not supported: " +
                                 CodeGen::Print(type));
 }
 
-Opcode ContextBuilder::GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
+Opcode BytecodeBuilder::GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
                                                     llvm::Type *type) const {
-  index_t id = InterpreterContext::GetOpcodeId(untyped_op);
+  index_t id = BytecodeFunction::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
 
   switch (code_context_.GetTypeSize(type)) {
     case 1:
-      return InterpreterContext::GetOpcodeFromId(id + 0);
+      return BytecodeFunction::GetOpcodeFromId(id + 0);
     case 2:
-      return InterpreterContext::GetOpcodeFromId(id + 1);
+      return BytecodeFunction::GetOpcodeFromId(id + 1);
     case 4:
-      return InterpreterContext::GetOpcodeFromId(id + 2);
+      return BytecodeFunction::GetOpcodeFromId(id + 2);
     case 8:
-      return InterpreterContext::GetOpcodeFromId(id + 3);
+      return BytecodeFunction::GetOpcodeFromId(id + 3);
     default:
       throw NotSupportedException("llvm type size not supported: " +
                                   CodeGen::Print(type));
@@ -136,7 +135,7 @@ Opcode ContextBuilder::GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
 }
 
 template <size_t number_instruction_slots>
-Instruction &ContextBuilder::InsertBytecodeInstruction(
+Instruction &BytecodeBuilder::InsertBytecodeInstruction(
     const llvm::Instruction *llvm_instruction, Opcode opcode, index_t arg0,
     index_t arg1, index_t arg2, index_t arg3, index_t arg4, index_t arg5,
     index_t arg6) {
@@ -147,10 +146,10 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(
   PL_ASSERT(number_instruction_slots > 1 ||
             (arg3 == 0 && arg4 == 0 && arg5 == 0 && arg6 == 0));
 
-  context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots,
+  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(), number_instruction_slots,
                             0);
   Instruction &instruction = *reinterpret_cast<Instruction *>(
-      &*(context_.bytecode_.end() - number_instruction_slots));
+      &*(bytecode_function_.bytecode_.end() - number_instruction_slots));
   instruction.op = opcode;
   instruction.args[0] = arg0;
   instruction.args[1] = arg1;
@@ -168,7 +167,7 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(
   return instruction;
 }
 
-Instruction &ContextBuilder::InsertBytecodeInstruction(
+Instruction &BytecodeBuilder::InsertBytecodeInstruction(
     const llvm::Instruction *llvm_instruction, Opcode opcode,
     const llvm::Value *arg0, const llvm::Value *arg1, const llvm::Value *arg2) {
   PL_ASSERT(opcode != Opcode::undefined);
@@ -176,7 +175,7 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(
                                    GetValueSlot(arg1), GetValueSlot(arg2));
 }
 
-Instruction &ContextBuilder::InsertBytecodeInstruction(
+Instruction &BytecodeBuilder::InsertBytecodeInstruction(
     const llvm::Instruction *llvm_instruction, Opcode opcode,
     const llvm::Value *arg0, const llvm::Value *arg1) {
   PL_ASSERT(opcode != Opcode::undefined);
@@ -184,7 +183,7 @@ Instruction &ContextBuilder::InsertBytecodeInstruction(
                                    GetValueSlot(arg1));
 }
 
-ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
+ExternalCallInstruction &BytecodeBuilder::InsertBytecodeExternalCallInstruction(
     const llvm::Instruction *llvm_instruction, index_t call_context,
     void *function) {
   // calculate number of slots and assert it is 2 (this way we recognise if any
@@ -194,76 +193,79 @@ ExternalCallInstruction &ContextBuilder::InsertBytecodeExternalCallInstruction(
       sizeof(instr_slot_t);
   PL_ASSERT(number_instruction_slots == 2);
 
-  context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots,
+  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(), number_instruction_slots,
                             0);
 
   ExternalCallInstruction instruction = {
       Opcode::call_external, call_context,
       reinterpret_cast<void (*)(void)>(function)};
   *reinterpret_cast<ExternalCallInstruction *>(
-      &*(context_.bytecode_.end() - number_instruction_slots)) = instruction;
+      &*(bytecode_function_.bytecode_.end() - number_instruction_slots)) = instruction;
 
   AddInstructionToTrace(llvm_instruction, number_instruction_slots);
 
   return reinterpret_cast<ExternalCallInstruction &>(
-      context_.bytecode_[context_.bytecode_.size() - number_instruction_slots]);
+      bytecode_function_.bytecode_[bytecode_function_.bytecode_.size() - number_instruction_slots]);
 }
 
-InternalCallInstruction &ContextBuilder::InsertBytecodeInternalCallInstruction(
-    const llvm::Instruction *llvm_instruction, index_t sub_context,
+InternalCallInstruction &BytecodeBuilder::InsertBytecodeInternalCallInstruction(
+    const llvm::Instruction *llvm_instruction, index_t sub_function,
     index_t dest_slot, size_t number_arguments) {
   // calculate number of required instruction slots
   const size_t number_instruction_slots =
       ((2 * (4 + number_arguments)) + sizeof(instr_slot_t) - 1) /
       sizeof(instr_slot_t);
 
-  context_.bytecode_.insert(context_.bytecode_.end(), number_instruction_slots,
+  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(), number_instruction_slots,
                             0);
   InternalCallInstruction &instruction =
       *reinterpret_cast<InternalCallInstruction *>(
-          &*(context_.bytecode_.end() - number_instruction_slots));
+          &*(bytecode_function_.bytecode_.end() - number_instruction_slots));
   instruction.op = Opcode::call_internal;
-  instruction.sub_context = sub_context;
+  instruction.sub_function = sub_function;
   instruction.dest_slot = dest_slot;
   instruction.number_args = static_cast<index_t>(number_arguments);
 
   PL_ASSERT(&instruction.args[number_arguments - 1] <
-            reinterpret_cast<index_t *>(&context_.bytecode_.back() + 1));
+            reinterpret_cast<index_t *>(&bytecode_function_.bytecode_.back() + 1));
 
   AddInstructionToTrace(llvm_instruction, number_instruction_slots);
 
   return reinterpret_cast<InternalCallInstruction &>(
-      *(context_.bytecode_.end() - number_instruction_slots));
+      *(bytecode_function_.bytecode_.end() - number_instruction_slots));
 }
 
 #ifndef NDEBUG
-void ContextBuilder::AddInstructionToTrace(
+void BytecodeBuilder::AddInstructionToTrace(
     const llvm::Instruction *llvm_instruction,
     size_t number_instruction_slots) {
-  context_.instruction_trace_.insert(context_.instruction_trace_.end(),
+  bytecode_function_.instruction_trace_.insert(bytecode_function_.instruction_trace_.end(),
                                      number_instruction_slots,
                                      llvm_instruction);
 }
 #endif
 
-ContextBuilder::value_index_t ContextBuilder::CreateValueIndex(
-    const llvm::Value *value, instruction_index_t instruction_index) {
-  PL_ASSERT(value_mapping_.find(value) == value_mapping_.end());
+BytecodeBuilder::value_index_t BytecodeBuilder::GetValueIndex(
+    const llvm::Value *value) {
+  auto result = value_mapping_.find(value);
+
+  // If the index already exists, just return it
+  if (result != value_mapping_.end())
+    return result->second;
+
+  // Otherwise create a new index
+
+  // Special case for constants
+  if (auto *llvm_constant = llvm::dyn_cast<llvm::Constant>(value))
+    return GetConstantIndex(llvm_constant);
 
   value_index_t value_index = value_liveness_.size();
   value_mapping_[value] = value_index;
-  value_liveness_.push_back({instruction_index, instruction_index});
-
+  value_liveness_.emplace_back(std::numeric_limits<index_t>::max(), std::numeric_limits<index_t>::max());
   return value_index;
 }
 
-ContextBuilder::value_index_t ContextBuilder::GetValueIndex(
-    const llvm::Value *value) const {
-  PL_ASSERT(value_mapping_.find(value) != value_mapping_.end());
-  return value_mapping_.at(value);
-}
-
-ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(
+BytecodeBuilder::value_index_t BytecodeBuilder::CreateValueAlias(
     const llvm::Value *alias, value_index_t value_index) {
   PL_ASSERT(value_mapping_.find(alias) == value_mapping_.end());
   value_mapping_[alias] = value_index;
@@ -271,7 +273,7 @@ ContextBuilder::value_index_t ContextBuilder::CreateValueAlias(
   return value_index;
 }
 
-value_t ContextBuilder::GetConstantValue(const llvm::Constant *constant) const {
+value_t BytecodeBuilder::GetConstantValue(const llvm::Constant *constant) const {
   llvm::Type *type = constant->getType();
 
   if (constant->isNullValue() || constant->isZeroValue()) {
@@ -317,7 +319,7 @@ value_t ContextBuilder::GetConstantValue(const llvm::Constant *constant) const {
   }
 }
 
-ContextBuilder::value_index_t ContextBuilder::AddConstant(
+BytecodeBuilder::value_index_t BytecodeBuilder::GetConstantIndex(
     const llvm::Constant *constant) {
   auto value_mapping_result = value_mapping_.find(constant);
   if (value_mapping_result != value_mapping_.end())
@@ -337,11 +339,14 @@ ContextBuilder::value_index_t ContextBuilder::AddConstant(
 
   if (constant_result == constants_.end()) {
     // create new constant with that value
-    value_index = CreateValueIndex(constant, 0);
+    value_index = value_liveness_.size();
+    value_mapping_[constant] = value_index;
+    value_liveness_.emplace_back(0, 0); // constant liveness starts at 0
+
     constants_.emplace_back(std::make_pair(value, value_index));
 
     // constants liveness starts at program start
-    value_liveness_[value_index].definition = 0;
+    value_liveness_[value_index].first = 0;
   } else {
     // value already exists, create alias
     value_index = constant_result->second;
@@ -351,42 +356,35 @@ ContextBuilder::value_index_t ContextBuilder::AddConstant(
   return value_index;
 };
 
-index_t ContextBuilder::GetValueSlot(value_index_t value_index) const {
+index_t BytecodeBuilder::GetValueSlot(value_index_t value_index) const {
   PL_ASSERT(value_index < value_slots_.size());
   return value_slots_[value_index];
 }
 
-index_t ContextBuilder::GetValueSlot(const llvm::Value *value) const {
-  return value_slots_[GetValueIndex(value)];
+index_t BytecodeBuilder::GetValueSlot(const llvm::Value *value) const {
+  auto result = value_mapping_.find(value);
+  PL_ASSERT(result != value_mapping_.end());
+
+  return value_slots_[result->second];
 }
 
-void ContextBuilder::AddValueDefinition(
-    value_index_t value_index, ContextBuilder::instruction_index_t definition) {
-  if (value_liveness_[value_index].definition == valueLivenessUnknown)
-    value_liveness_[value_index].definition = definition;
-  else
-    value_liveness_[value_index].definition =
-        std::max(value_liveness_[value_index].definition, definition);
+void BytecodeBuilder::ExtendValueLiveness(const llvm::Value *llvm_value, instruction_index_t instruction_index) {
+  value_index_t value_index = GetValueIndex(llvm_value);
+
+  // Special case if no liveness information is available yet
+  if (value_liveness_[value_index].first == std::numeric_limits<index_t>::max()) {
+    value_liveness_[value_index].first = instruction_index;
+    value_liveness_[value_index].second = instruction_index;
+    return;
+  }
+
+  if (instruction_index < value_liveness_[value_index].first)
+    value_liveness_[value_index].first = instruction_index;
+  else if (instruction_index > value_liveness_[value_index].second)
+    value_liveness_[value_index].second = instruction_index;
 }
 
-void ContextBuilder::AddValueUsage(value_index_t value_index,
-                                   ContextBuilder::instruction_index_t usage) {
-  if (value_liveness_[value_index].last_usage == valueLivenessUnknown)
-    value_liveness_[value_index].last_usage = usage;
-  else
-    value_liveness_[value_index].last_usage =
-        std::max(value_liveness_[value_index].last_usage, usage);
-}
-
-void ContextBuilder::ExtendValueLifetime(
-    value_index_t value_index, ContextBuilder::instruction_index_t instruction_index) {
-  if (instruction_index < value_liveness_[value_index].definition)
-    value_liveness_[value_index].definition = instruction_index;
-  else if (instruction_index > value_liveness_[value_index].last_usage)
-    value_liveness_[value_index].last_usage = instruction_index;
-}
-
-index_t ContextBuilder::GetTemporaryValueSlot(const llvm::BasicBlock *bb) {
+index_t BytecodeBuilder::GetTemporaryValueSlot(const llvm::BasicBlock *bb) {
   // we basically count the number of additional value slots that are
   // requested per basic block
 
@@ -399,7 +397,7 @@ index_t ContextBuilder::GetTemporaryValueSlot(const llvm::BasicBlock *bb) {
   return number_value_slots_ + number_temporary_values_[bb] - 1;
 }
 
-ffi_type *ContextBuilder::GetFFIType(llvm::Type *type) {
+ffi_type *BytecodeBuilder::GetFFIType(llvm::Type *type) const {
   if (type->isVoidTy()) {
     return &ffi_type_void;
   } else if (type->isPointerTy()) {
@@ -427,22 +425,22 @@ ffi_type *ContextBuilder::GetFFIType(llvm::Type *type) {
   }
 }
 
-bool ContextBuilder::IsConstantValue(const llvm::Value *value) const {
+bool BytecodeBuilder::IsConstantValue(const llvm::Value *value) const {
   auto *constant = llvm::dyn_cast<llvm::Constant>(value);
   return (constant != nullptr);
 }
 
-int64_t ContextBuilder::GetConstantIntegerValueSigned(
+int64_t BytecodeBuilder::GetConstantIntegerValueSigned(
     llvm::Value *constant) const {
   return llvm::cast<llvm::ConstantInt>(constant)->getSExtValue();
 }
 
-uint64_t ContextBuilder::GetConstantIntegerValueUnsigned(
+uint64_t BytecodeBuilder::GetConstantIntegerValueUnsigned(
     llvm::Value *constant) const {
   return llvm::cast<llvm::ConstantInt>(constant)->getZExtValue();
 }
 
-bool ContextBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb,
+bool BytecodeBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb,
                                          const llvm::BasicBlock *succ) const {
   // walk the vector where we saved the basic block pointers in R
   // reverse post order (RPO)
@@ -455,7 +453,7 @@ bool ContextBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb,
   return false;
 }
 
-void ContextBuilder::AnalyseFunction() {
+void BytecodeBuilder::AnalyseFunction() {
   std::unordered_map<const llvm::BasicBlock *, std::pair<index_t, index_t>>
       bb_instruction_index_range;
 
@@ -468,9 +466,8 @@ void ContextBuilder::AnalyseFunction() {
 
   // Process function arguments
   for (auto &argument : llvm_function_->args()) {
-    value_index_t value_index = CreateValueIndex(&argument, 0);
     // DEF: function arguments are already defined at function start
-    AddValueDefinition(value_index, 0);
+    ExtendValueLiveness(&argument, 0);
   }
 
   instruction_index_t instruction_index = 0;
@@ -522,45 +519,34 @@ void ContextBuilder::AnalyseFunction() {
                    llvm::dyn_cast<llvm::PHINode>(&*instr_iterator);
                ++instr_iterator) {
 
-            // we don't know if this is the first time we hit this phi
-            value_index_t value_index;
-            if (value_mapping_.find(phi_instruction) == value_mapping_.end())
-              value_index = CreateValueIndex(phi_instruction, instruction_index);
-            else
-              value_index = GetValueIndex(phi_instruction);
+            // extend lifetime of phi value itself
+            ExtendValueLiveness(phi_instruction, instruction_index);
 
-            ExtendValueLifetime(value_index, instruction_index);
-
-            llvm::Value *phi_operand =
-                phi_instruction->getIncomingValueForBlock(bb);
-
-            value_index_t phi_operand_index;
-            if (!IsConstantValue(phi_operand))
-              phi_operand_index = GetValueIndex(phi_operand);
-            else
-              phi_operand_index = AddConstant(llvm::cast<llvm::Constant>(phi_operand));
-
-            ExtendValueLifetime(phi_operand_index,
-                                instruction_index);
+            // extend lifetime of its operand
+            llvm::Value *phi_operand = phi_instruction->getIncomingValueForBlock(bb);
+            // Similar to Exception 3, we extend the lifetime by one, to ensure
+            // the other phi operations do not overwrite the operand
+            ExtendValueLiveness(phi_operand, instruction_index + 1);
           } // end iterate phi instructions
 
-          // We also use iterating the basic block successors, to find
-          // back edges. If we have see a successor basic block before, it
+          // We also use iterating the basic block successors to find
+          // back edges. If we have seen a successor basic block before, it
           // must be a back edge.
           if (!found_back_edge) {
             auto instruction_index_range =
                 bb_instruction_index_range.find(*succ_iterator);
             if (instruction_index_range != bb_instruction_index_range.end()) {
+              index_t back_edge_instruction_index = instruction_index_range->second.first;
 
               // For all values that are live at that time...
               for (auto &liveness : value_liveness_) {
-                if (liveness.definition < instruction_index_range->second.first
-                    && liveness.last_usage >= instruction_index_range->second.first) {
+                if (liveness.first < back_edge_instruction_index
+                    && liveness.second >= back_edge_instruction_index) {
 
-                  // ...extend livetime of this value to survive back edge
+                  // ...extend lifetime of this value to survive back edge
                   // instruction_index + 1 is the index of the last
                   // instruction in this basic block
-                  liveness.last_usage = instruction_index + 1;
+                  liveness.second = instruction_index + 1;
                 }
               }
 
@@ -613,26 +599,20 @@ void ContextBuilder::AnalyseFunction() {
               instruction->getOpcode() == llvm::Instruction::ExtractValue)
             continue;
 
-          // Lookup value index for constant or create a new one if needed
-          value_index_t value_index =
-              AddConstant(llvm::cast<llvm::Constant>(operand));
-
           // USE: extend liveness of constant value
-          AddValueUsage(value_index, instruction_index);
+          ExtendValueLiveness(operand, instruction_index);
 
           // Exception 4: We extend the lifetime of GEP operands of GEPs
-          // that don't translate to nop by one, to make sure that the operands
+          // that don't translate to nop, by one, to make sure that the operands
           // don't get overridden when we split the GEP into several
           // instructions.
         } else if (is_non_zero_gep) {
-          value_index_t operand_index = GetValueIndex(operand);
-          AddValueUsage(operand_index, instruction_index + 1);  // extended!
+          ExtendValueLiveness(operand, instruction_index + 1);  // extended!
 
           // A BasicBlock may be a label operand, but we don't need to track
           // them
-        } else if (llvm::dyn_cast<llvm::BasicBlock>(operand) == nullptr) {
-          value_index_t operand_index = GetValueIndex(operand);
-          AddValueUsage(operand_index, instruction_index);
+        } else if (!llvm::isa<llvm::BasicBlock>(operand)) {
+          ExtendValueLiveness(operand, instruction_index);
         }
       }
 
@@ -692,9 +672,7 @@ void ContextBuilder::AnalyseFunction() {
                     extract_instruction;
               }
 
-              value_index_t extract_value_index =
-                  CreateValueIndex(extract_instruction, instruction_index);
-              AddValueDefinition(extract_value_index, instruction_index);
+              ExtendValueLiveness(extract_instruction, instruction_index);
             }
 
             // Do not process the result of this instruction,
@@ -708,18 +686,15 @@ void ContextBuilder::AnalyseFunction() {
 
       // DEF: save the instruction index as the liveness starting point
       if (!instruction->getType()->isVoidTy()) {
-        value_index_t value_index = CreateValueIndex(instruction, instruction_index);
-        AddValueDefinition(value_index, instruction_index);
+        ExtendValueLiveness(instruction, instruction_index);
       }
     }
 
     bb_instruction_index_range[bb].second = instruction_index - 1;
   }
-
-  instruction_index_max_ = instruction_index - 1;
 }
 
-void ContextBuilder::PerformNaiveRegisterAllocation() {
+void BytecodeBuilder::PerformNaiveRegisterAllocation() {
   // assign a value slot to every liveness range in value_liveness_
   value_slots_.resize(value_liveness_.size(), 0);
 
@@ -731,8 +706,8 @@ void ContextBuilder::PerformNaiveRegisterAllocation() {
 
   // iterate over other entries, which are already sorted
   for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
-    // skip values that start at zero or that are never used
-    if (value_liveness_[i].last_usage == valueLivenessUnknown) continue;
+    // skip values that are never used
+    if (value_liveness_[i].first == value_liveness_[i].second) continue;
 
     value_slots_[i] = reg++ + 1;  // + 1 because 0 is dummy slot
   }
@@ -740,7 +715,7 @@ void ContextBuilder::PerformNaiveRegisterAllocation() {
   number_value_slots_ = reg + 1;
 }
 
-void ContextBuilder::PerformGreedyRegisterAllocation() {
+void BytecodeBuilder::PerformGreedyRegisterAllocation() {
   // assign a value slot to every liveness range in value_liveness_
 
   value_slots_.resize(value_liveness_.size(), 0);
@@ -748,7 +723,7 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
 
   auto findEmptyRegister = [&registers](ValueLiveness liveness) {
     for (index_t i = 0; i < registers.size(); ++i) {
-      if (registers[i].last_usage <= liveness.definition) {
+      if (registers[i].second <= liveness.first) {
         registers[i] = liveness;
         return i;
       }
@@ -769,8 +744,8 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
 
   // get all entries with .definition = 0
   for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
-    if (value_liveness_[i].definition == 0 &&
-        value_liveness_[i].last_usage != valueLivenessUnknown) {
+    if (value_liveness_[i].first == 0 &&
+        value_liveness_[i].second != 0) {
       registers.push_back(value_liveness_[i]);
       value_slots_[i] =
           registers.size() - 1 + 1;  // + 1 because 0 is dummy slot
@@ -786,13 +761,13 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
   // iterate over other entries, which are already sorted
   for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
     // skip values that start at zero or that are never used
-    if (value_liveness_[i].definition == 0 ||
-        value_liveness_[i].last_usage == valueLivenessUnknown)
+    if (value_liveness_[i].first == 0 ||
+        value_liveness_[i].first == value_liveness_[i].second)
       continue;
 
 #ifndef NDEBUG
-    PL_ASSERT(value_liveness_[i].definition >= instruction_index);
-    instruction_index = value_liveness_[i].definition;
+    PL_ASSERT(value_liveness_[i].first >= instruction_index);
+    instruction_index = value_liveness_[i].first;
 #endif
 
     value_slots_[i] = findEmptyRegister(value_liveness_[i]) +
@@ -802,44 +777,13 @@ void ContextBuilder::PerformGreedyRegisterAllocation() {
   number_value_slots_ = registers.size() + 1;  // + 1 because 0 is dummy slot
 }
 
-void ContextBuilder::ValidateRegisterMapping() {
-  // array [slots][time] that simply tracks if a slots if occupied at a time
-  std::vector<bool> slot_occupied(number_value_slots_ * instruction_index_max_,
-                                  false);
-
-  // define a setter and a getter for the array
-  auto get = [&slot_occupied, this](index_t slot, instruction_index_t time) {
-    return slot_occupied[number_value_slots_ * time + slot];
-  };
-
-  auto set = [&slot_occupied, this](index_t slot, instruction_index_t time) {
-    slot_occupied[number_value_slots_ * time + slot] = true;
-  };
-
-  PL_ASSERT(value_slots_.size() == value_liveness_.size());
-
-  // iterate over all livetimes and out them in the array
-  for (size_t i = 0; i < value_liveness_.size(); i++) {
-    index_t slot = value_slots_[i];
-    if (slot == 0) continue;
-
-    for (instruction_index_t time = value_liveness_[i].definition;
-         time < value_liveness_[i].last_usage; time++) {
-      // check if the range in this register is not occupied by anyone else
-      if (get(slot, time) != false)
-        throw Exception("register mapping is inavlid");
-      set(slot, time);
-    }
-  }
-}
-
-void ContextBuilder::DumpValueInformation() {
+void BytecodeBuilder::DumpValueInformation() {
   // This function dumps the value liveness and the register allocation
   // in csv format for debugging purposes: every instruction_index is one row,
   // every value index is one column.
 
   std::ofstream output;
-  output.open(std::string("dump") + context_.function_name_ + "_value_information.csv");
+  output.open(std::string("dump") + bytecode_function_.function_name_ + "_value_information.csv");
 
   output << "index;instruction;";
   std::string row;
@@ -871,8 +815,8 @@ void ContextBuilder::DumpValueInformation() {
 
         // for every value index, print if its live or not
         for (size_t i = 0; i < value_liveness_.size(); i++) {
-          if (instruction_index >= value_liveness_[i].definition &&
-              instruction_index <= value_liveness_[i].last_usage)
+          if (instruction_index >= value_liveness_[i].first &&
+              instruction_index <= value_liveness_[i].second)
             output << "L;";
           else
             output << ";";
@@ -887,8 +831,8 @@ void ContextBuilder::DumpValueInformation() {
 
       // for every value index, print if its live or not
       for (size_t i = 0; i < value_liveness_.size(); i++) {
-        if (instruction_index >= value_liveness_[i].definition &&
-            instruction_index <= value_liveness_[i].last_usage)
+        if (instruction_index >= value_liveness_[i].first &&
+            instruction_index <= value_liveness_[i].second)
           output << "L;";
         else
           output << ";";
@@ -901,47 +845,37 @@ void ContextBuilder::DumpValueInformation() {
   // 1. print value index
   output << ";value index:;";
   for (size_t i = 0; i < value_liveness_.size(); i++) {
-    if (value_liveness_[i].last_usage < valueLivenessUnknown)
-      output << i;
-    output << ";";
+    output << i << ";";
   }
   output << "\n";
 
   // 2. print value slot
   output << ";value slot:;";
   for (size_t i = 0; i < value_liveness_.size(); i++) {
-    if (value_liveness_[i].last_usage < valueLivenessUnknown)
-      output << value_slots_[i];
-    output << ";";
+    output << value_slots_[i] << ";";
   }
   output << "\n";
 
   // 3. print value definition
   output << ";definition:;";
   for (size_t i = 0; i < value_liveness_.size(); i++) {
-    if (value_liveness_[i].last_usage < valueLivenessUnknown)
-      output << value_liveness_[i].definition;
-    output << ";";
+    output << value_liveness_[i].first << ";";
   }
   output << "\n";
 
   // 4. print value last usage
   output << ";last usage:;";
   for (size_t i = 0; i < value_liveness_.size(); i++) {
-    if (value_liveness_[i].last_usage < valueLivenessUnknown)
-      output << value_liveness_[i].last_usage;
-    output << ";";
+    output << value_liveness_[i].second << ";";
   }
   output << "\n";
 
   // 5. print mapped LLVM values
   output << ";mapped LLVM  values:;";
   for (size_t i = 0; i < value_liveness_.size(); i++) {
-    if (value_liveness_[i].last_usage < valueLivenessUnknown) {
-      for (auto &mapping : value_mapping_) {
-        if (mapping.second == i) {
-          output << CodeGen::Print(mapping.first) << ", ";
-        }
+    for (auto &mapping : value_mapping_) {
+      if (mapping.second == i) {
+        output << CodeGen::Print(mapping.first) << ", ";
       }
     }
     output << ";";
@@ -951,7 +885,7 @@ void ContextBuilder::DumpValueInformation() {
   output.close();
 }
 
-void ContextBuilder::TranslateFunction() {
+void BytecodeBuilder::TranslateFunction() {
   // Map every basic block an index in the resulting bytecode stream. This
   // is needed to perform the relocations in the branch instructions.
   std::unordered_map<const llvm::BasicBlock *, index_t> bb_mapping;
@@ -963,14 +897,14 @@ void ContextBuilder::TranslateFunction() {
   // Iterate the basic blocks in reverse post order (RPO)
   // Linear scan register allocation requires RPO traversal
   // Initializing the RPO traversal is expensice, so we initialize it once
-  // for the ContextBuilder object and reuse it.
+  // for the BytecodeBuilder object and reuse it.
   for (llvm::ReversePostOrderTraversal<const llvm::Function *>::rpo_iterator
            traversal_iterator = rpo_traversal_.begin();
        traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
     const llvm::BasicBlock *bb = *traversal_iterator;
 
     // add basic block mapping
-    bb_mapping[bb] = context_.bytecode_.size();
+    bb_mapping[bb] = bytecode_function_.bytecode_.size();
 
     // Interate all instruction in the basic block
     for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin();
@@ -1090,36 +1024,36 @@ void ContextBuilder::TranslateFunction() {
   // apply the relocations required by the placed branch instructions
   for (auto &relocation : bytecode_relocations) {
     reinterpret_cast<Instruction *>(
-        &context_.bytecode_[relocation.instruction_slot])
+        &bytecode_function_.bytecode_[relocation.instruction_slot])
         ->args[relocation.argument] = bb_mapping[relocation.bb];
   }
 }
 
-void ContextBuilder::Finalize() {
+void BytecodeBuilder::Finalize() {
   // calculate final number of value slots during runtime
-  context_.number_values_ = number_value_slots_ + number_temporary_value_slots_;
+  bytecode_function_.number_values_ = number_value_slots_ + number_temporary_value_slots_;
 
   // check if number values exceeds bit range (unrealistic)
-  if (context_.number_values_ >= std::numeric_limits<index_t>::max()) {
+  if (bytecode_function_.number_values_ >= std::numeric_limits<index_t>::max()) {
     throw NotSupportedException("number of values exceeds max number of bits");
   }
 
-  // prepare constants for context
-  context_.constants_.resize(constants_.size());
+  // prepare constants
+  bytecode_function_.constants_.resize(constants_.size());
   for (size_t i = 0; i < constants_.size(); ++i) {
-    context_.constants_[i] =
+    bytecode_function_.constants_[i] =
         std::make_pair(constants_[i].first, GetValueSlot(constants_[i].second));
   }
 
-  // prepare arguments for context
-  context_.function_arguments_.resize(llvm_function_->arg_size());
+  // prepare arguments
+  bytecode_function_.function_arguments_.resize(llvm_function_->arg_size());
   index_t argument_index = 0;
   for (auto &argument : llvm_function_->args()) {
-    context_.function_arguments_[argument_index++] = GetValueSlot(&argument);
+    bytecode_function_.function_arguments_[argument_index++] = GetValueSlot(&argument);
   }
 }
 
-void ContextBuilder::ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb) {
+void BytecodeBuilder::ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb) {
   typedef struct {
     const llvm::Instruction *instruction;
     index_t dest;
@@ -1174,7 +1108,7 @@ void ContextBuilder::ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb) {
   }
 }
 
-void ContextBuilder::TranslateBranch(
+void BytecodeBuilder::TranslateBranch(
     const llvm::Instruction *instruction,
     std::vector<BytecodeRelocation> &bytecode_relocations) {
   auto *branch_instruction = llvm::cast<llvm::BranchInst>(&*instruction);
@@ -1195,7 +1129,7 @@ void ContextBuilder::TranslateBranch(
                                 0);
 
       BytecodeRelocation relocation_false{
-          static_cast<index_t>(context_.bytecode_.size() - 1), 1,
+          static_cast<index_t>(bytecode_function_.bytecode_.size() - 1), 1,
           llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(2))};
 
       // add relocation entry, to insert missing information of destination
@@ -1209,7 +1143,7 @@ void ContextBuilder::TranslateBranch(
                                 0, 0);
 
       BytecodeRelocation relocation_false{
-          static_cast<index_t>(context_.bytecode_.size() - 1), 1,
+          static_cast<index_t>(bytecode_function_.bytecode_.size() - 1), 1,
           llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(1))};
 
       // add relocation entry, to insert missing information of destination
@@ -1217,7 +1151,7 @@ void ContextBuilder::TranslateBranch(
       bytecode_relocations.push_back(relocation_false);
 
       BytecodeRelocation relocation_true{
-          static_cast<index_t>(context_.bytecode_.size() - 1), 2,
+          static_cast<index_t>(bytecode_function_.bytecode_.size() - 1), 2,
           llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(2))};
 
       // add relocation entry, to insert missing information of destination
@@ -1235,7 +1169,7 @@ void ContextBuilder::TranslateBranch(
       InsertBytecodeInstruction(instruction, Opcode::branch_uncond, 0);
 
       BytecodeRelocation relocation{
-          static_cast<index_t>(context_.bytecode_.size() - 1), 0,
+          static_cast<index_t>(bytecode_function_.bytecode_.size() - 1), 0,
           llvm::cast<llvm::BasicBlock>(branch_instruction->getOperand(0))};
 
       // add relocation entry, to insert missing information of destination
@@ -1245,7 +1179,7 @@ void ContextBuilder::TranslateBranch(
   }
 }
 
-void ContextBuilder::TranslateReturn(const llvm::Instruction *instruction) {
+void BytecodeBuilder::TranslateReturn(const llvm::Instruction *instruction) {
   auto *return_instruction = llvm::cast<llvm::ReturnInst>(&*instruction);
 
   // We only have one ret bytecode instruction. If the function returns void,
@@ -1259,7 +1193,7 @@ void ContextBuilder::TranslateReturn(const llvm::Instruction *instruction) {
   InsertBytecodeInstruction(instruction, Opcode::ret, return_slot);
 }
 
-void ContextBuilder::TranslateBinaryOperator(
+void BytecodeBuilder::TranslateBinaryOperator(
     const llvm::Instruction *instruction) {
   auto *binary_operator = llvm::cast<llvm::BinaryOperator>(&*instruction);
   auto *type = binary_operator->getType();
@@ -1342,7 +1276,7 @@ void ContextBuilder::TranslateBinaryOperator(
                             binary_operator->getOperand(1));
 }
 
-void ContextBuilder::TranslateAlloca(const llvm::Instruction *instruction) {
+void BytecodeBuilder::TranslateAlloca(const llvm::Instruction *instruction) {
   auto *alloca_instruction = llvm::cast<llvm::AllocaInst>(&*instruction);
   Opcode opcode;
 
@@ -1371,7 +1305,7 @@ void ContextBuilder::TranslateAlloca(const llvm::Instruction *instruction) {
   }
 }
 
-void ContextBuilder::TranslateLoad(const llvm::Instruction *instruction) {
+void BytecodeBuilder::TranslateLoad(const llvm::Instruction *instruction) {
   auto *load_instruction = llvm::cast<llvm::LoadInst>(&*instruction);
 
   Opcode opcode = GetOpcodeForTypeSizeIntTypes(
@@ -1380,7 +1314,7 @@ void ContextBuilder::TranslateLoad(const llvm::Instruction *instruction) {
                             load_instruction->getPointerOperand());
 }
 
-void ContextBuilder::TranslateStore(const llvm::Instruction *instruction) {
+void BytecodeBuilder::TranslateStore(const llvm::Instruction *instruction) {
   auto *store_instruction = llvm::cast<llvm::StoreInst>(&*instruction);
 
   Opcode opcode =
@@ -1391,7 +1325,7 @@ void ContextBuilder::TranslateStore(const llvm::Instruction *instruction) {
                             store_instruction->getValueOperand());
 }
 
-void ContextBuilder::TranslateGetElementPtr(
+void BytecodeBuilder::TranslateGetElementPtr(
     const llvm::Instruction *instruction) {
   auto *gep_instruction = llvm::cast<llvm::GetElementPtrInst>(&*instruction);
   int64_t overall_offset = 0;
@@ -1404,7 +1338,7 @@ void ContextBuilder::TranslateGetElementPtr(
   // instruction is created here, but offset will be filled in later,
   // because we may merge it with constant array accesses
   auto &gep_offset_bytecode_instruction_ref = InsertBytecodeInstruction(gep_instruction, Opcode::gep_offset, GetValueSlot(gep_instruction), GetValueSlot(gep_instruction->getPointerOperand()), 0);
-  size_t gep_offset_bytecode_instruction_index = context_.GetIndexFromIP(&gep_offset_bytecode_instruction_ref);
+  size_t gep_offset_bytecode_instruction_index = bytecode_function_.GetIndexFromIP(&gep_offset_bytecode_instruction_ref);
 
   // First index operand of the instruction is the array index for the
   // source type
@@ -1482,11 +1416,11 @@ void ContextBuilder::TranslateGetElementPtr(
   // fill in calculated overall offset in previously placed gep_offset
   // bytecode instruction
   // (use index instead of reference, as vector may has been relocated!)
-  reinterpret_cast<Instruction *>(&context_.bytecode_[gep_offset_bytecode_instruction_index])->args[2] =
+  reinterpret_cast<Instruction *>(&bytecode_function_.bytecode_[gep_offset_bytecode_instruction_index])->args[2] =
       static_cast<index_t>(overall_offset);
 }
 
-void ContextBuilder::TranslateFloatIntCast(
+void BytecodeBuilder::TranslateFloatIntCast(
     const llvm::Instruction *instruction) {
   auto *cast_instruction = llvm::dyn_cast<llvm::CastInst>(&*instruction);
 
@@ -1552,7 +1486,7 @@ void ContextBuilder::TranslateFloatIntCast(
                             cast_instruction->getOperand(0));
 }
 
-void ContextBuilder::TranslateIntExt(const llvm::Instruction *instruction) {
+void BytecodeBuilder::TranslateIntExt(const llvm::Instruction *instruction) {
   auto *cast_instruction = llvm::dyn_cast<llvm::CastInst>(&*instruction);
 
   size_t src_type_size =
@@ -1612,7 +1546,7 @@ void ContextBuilder::TranslateIntExt(const llvm::Instruction *instruction) {
                             cast_instruction->getOperand(0));
 }
 
-void ContextBuilder::TranslateCmp(const llvm::Instruction *instruction) {
+void BytecodeBuilder::TranslateCmp(const llvm::Instruction *instruction) {
   auto *cmp_instruction = llvm::cast<llvm::CmpInst>(&*instruction);
   auto *type = cmp_instruction->getOperand(0)->getType();
   Opcode opcode = Opcode::undefined;
@@ -1689,7 +1623,7 @@ void ContextBuilder::TranslateCmp(const llvm::Instruction *instruction) {
                             cmp_instruction->getOperand(1));
 }
 
-void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
+void BytecodeBuilder::TranslateCall(const llvm::Instruction *instruction) {
   auto *call_instruction = llvm::cast<llvm::CallInst>(&*instruction);
 
   llvm::Function *function = call_instruction->getCalledFunction();
@@ -1823,13 +1757,13 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
             GetFFIType(call_instruction->getArgOperand(i)->getType());
       }
 
-      // add call context to interpreter context
-      context_.external_call_contexts_.push_back(call_context);
+      // add call context to bytecode function
+      bytecode_function_.external_call_contexts_.push_back(call_context);
 
       // insert bytecode instruction referring to this call context
       InsertBytecodeExternalCallInstruction(
           call_instruction,
-          static_cast<index_t>(context_.external_call_contexts_.size() - 1),
+          static_cast<index_t>(bytecode_function_.external_call_contexts_.size() - 1),
           raw_pointer);
     }
   } else {
@@ -1839,23 +1773,23 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
     if (!instruction->getType()->isVoidTy())
       dest_slot = GetValueSlot(call_instruction);
 
-    // Translate the interpreter context for the function we want to call
-    index_t sub_context_index;
-    const auto result = sub_context_mapping_.find(function);
-    if (result != sub_context_mapping_.end()) {
-      sub_context_index = result->second;
+    // Translate the bytecode function we want to call
+    index_t sub_function_index;
+    const auto result = sub_function_mapping_.find(function);
+    if (result != sub_function_mapping_.end()) {
+      sub_function_index = result->second;
     } else {
-      auto sub_context =
-          ContextBuilder::CreateInterpreterContext(code_context_, function);
+      auto sub_function =
+          BytecodeBuilder::CreateBytecodeFunction(code_context_, function);
 
-      context_.sub_contexts_.push_back(std::move(sub_context));
-      sub_context_index = context_.sub_contexts_.size() - 1;
-      sub_context_mapping_[function] = sub_context_index;
+      bytecode_function_.sub_functions_.push_back(std::move(sub_function));
+      sub_function_index = bytecode_function_.sub_functions_.size() - 1;
+      sub_function_mapping_[function] = sub_function_index;
     }
 
     InternalCallInstruction &bytecode_instruction =
         InsertBytecodeInternalCallInstruction(
-            call_instruction, sub_context_index, dest_slot,
+            call_instruction, sub_function_index, dest_slot,
             call_instruction->getNumArgOperands());
 
     for (unsigned int i = 0; i < call_instruction->getNumArgOperands(); i++) {
@@ -1872,7 +1806,7 @@ void ContextBuilder::TranslateCall(const llvm::Instruction *instruction) {
   }
 }
 
-void ContextBuilder::TranslateSelect(const llvm::Instruction *instruction) {
+void BytecodeBuilder::TranslateSelect(const llvm::Instruction *instruction) {
   auto *select_instruction = llvm::cast<llvm::SelectInst>(&*instruction);
 
   InsertBytecodeInstruction<2>(
@@ -1882,7 +1816,7 @@ void ContextBuilder::TranslateSelect(const llvm::Instruction *instruction) {
       GetValueSlot(select_instruction->getFalseValue()));
 }
 
-void ContextBuilder::TranslateExtractValue(
+void BytecodeBuilder::TranslateExtractValue(
     const llvm::Instruction *instruction) {
   auto *extract_instruction = llvm::cast<llvm::ExtractValueInst>(&*instruction);
 

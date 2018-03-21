@@ -2,17 +2,17 @@
 //
 //                         Peloton
 //
-// query_interpreter.h
+// bytecode_interpreter.h
 //
-// Identification: src/include/codegen/interpreter/query_interpreter.h
+// Identification: src/include/codegen/interpreter/bytecode_interpreter.h
 //
-// Copyright (c) 2015-2017, Carnegie Mellon University Database Group
+// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
-#include "codegen/interpreter/interpreter_context.h"
+#include "codegen/interpreter/bytecode_function.h"
 #include "codegen/query.h"
 #include "common/exception.h"
 #include "common/overflow_builtins.h"
@@ -24,8 +24,8 @@ namespace interpreter {
 /**
  * Holds the runtime information for a external funtion call. Because libffi
  * requires pointers to the actual value slots, this information is different
- * for every function activation, and can not be stored in the interpreter
- * context.
+ * for every function activation, and can not be stored in the bytecode
+ * function.
  */
 typedef struct {
   ffi_cif call_interface;
@@ -33,34 +33,34 @@ typedef struct {
   value_t *return_pointer;
 } CallActivation;
 
-class QueryInterpreter {
+class BytecodeInterpreter {
  public:
   /**
    * Executes a translated function with the interpreter
-   * @param context interpreter context of translated function
+   * @param bytecode_function bytecode function that shall be executed
    * @param arguments vector of function arguments (stored as value_t). The
    * number of arguments must match the number expected by the executed
    * function.
    * @return return Value of the LLVM function or undefined if void.
    */
-  static value_t ExecuteFunction(const InterpreterContext &context,
+  static value_t ExecuteFunction(const BytecodeFunction &bytecode_function,
                                  const std::vector<value_t> &arguments);
   /**
    * Executes a translated function with the interpreter
    * (Wrapper for usage with a single char* argument)
-   * @param context Interpreter context of translated function, must
+   * @param bytecode_function  bytecode function that shall be executed, must
    * expect one argument.
    * @param arguments Char pointer argument of the function.
    */
-  static void ExecuteFunction(const InterpreterContext &context, char *param);
+  static void ExecuteFunction(const BytecodeFunction &bytecode_function, char *param);
 
  private:
-  explicit QueryInterpreter(const InterpreterContext &context);
+  explicit BytecodeInterpreter(const BytecodeFunction &bytecode_function);
 
   /**
    * Executes a function with the given arguments. The return value can
    * afterwards retrieved with GetReturnValue(). This function is also called
-   * for internal function calls in this context.
+   * for internal function calls during execution.
    * @param arguments Vector of function arguments (stored as value_t). The
    * number of arguments must match the number expected by the executed
    * function.
@@ -92,7 +92,7 @@ class QueryInterpreter {
    */
   template <typename type_t>
   ALWAYS_INLINE inline type_t GetValue(const index_t index) {
-    PL_ASSERT(index >= 0 && index < context_.number_values_);
+    PL_ASSERT(index >= 0 && index < bytecode_function_.number_values_);
     return *reinterpret_cast<type_t *>(&values_[index]);
   }
 
@@ -106,7 +106,7 @@ class QueryInterpreter {
    */
   template <typename type_t>
   ALWAYS_INLINE inline type_t &GetValueReference(const index_t index) {
-    PL_ASSERT(index >= 0 && index < context_.number_values_);
+    PL_ASSERT(index >= 0 && index < bytecode_function_.number_values_);
     return reinterpret_cast<type_t &>(values_[index]);
   }
 
@@ -118,7 +118,7 @@ class QueryInterpreter {
    */
   template <typename type_t>
   ALWAYS_INLINE inline void SetValue(const index_t index, const type_t value) {
-    PL_ASSERT(index >= 0 && index < context_.number_values_);
+    PL_ASSERT(index >= 0 && index < bytecode_function_.number_values_);
     *reinterpret_cast<type_t *>(&values_[index]) = value;
 
     DumpValue<type_t>(index);
@@ -777,11 +777,11 @@ class QueryInterpreter {
              call_activation.return_pointer,
              reinterpret_cast<void **>(call_activation.value_pointers.data()));
 
-    if (context_
+    if (bytecode_function_
             .external_call_contexts_[call_instruction->external_call_context]
             .dest_type != &ffi_type_void) {
       DumpValue<value_t>(
-          context_
+          bytecode_function_
               .external_call_contexts_[call_instruction->external_call_context]
               .dest_slot);
     }
@@ -800,10 +800,10 @@ class QueryInterpreter {
     }
 
     value_t result = ExecuteFunction(
-        context_.sub_contexts_[call_instruction->sub_context], arguments);
+        bytecode_function_.sub_functions_[call_instruction->sub_function], arguments);
     SetValue(call_instruction->dest_slot, result);
 
-    return AdvanceIP(instruction, context_.GetInteralCallInstructionSlotSize(
+    return AdvanceIP(instruction, bytecode_function_.GetInteralCallInstructionSlotSize(
                                       call_instruction));
   }
 
@@ -816,7 +816,7 @@ class QueryInterpreter {
 
   ALWAYS_INLINE inline const Instruction *branch_uncondHandler(
       const Instruction *instruction) {
-    return context_.GetIPFromIndex(instruction->args[0]);
+    return bytecode_function_.GetIPFromIndex(instruction->args[0]);
   }
 
   ALWAYS_INLINE inline const Instruction *branch_condHandler(
@@ -827,14 +827,14 @@ class QueryInterpreter {
     else
       next_bb = instruction->args[1];
 
-    return context_.GetIPFromIndex(next_bb);
+    return bytecode_function_.GetIPFromIndex(next_bb);
   }
 
   ALWAYS_INLINE inline const Instruction *branch_cond_ftHandler(
       const Instruction *instruction) {
     const Instruction *ip;
     if ((GetValue<value_t>(instruction->args[0]) & 0x1) > 0)
-      ip = context_.GetIPFromIndex(instruction->args[1]);
+      ip = bytecode_function_.GetIPFromIndex(instruction->args[1]);
     else
       ip = AdvanceIP<1>(instruction);
 
@@ -981,7 +981,7 @@ class QueryInterpreter {
    * Opcode. It will be filled once, when the interpreter is called the
    * first time.
    */
-  static void *label_pointers_[InterpreterContext::GetNumberOpcodes()];
+  static void *label_pointers_[BytecodeFunction::GetNumberOpcodes()];
 
   /**
    * Value slots (register) for the current function activation.
@@ -1002,13 +1002,13 @@ class QueryInterpreter {
   std::vector<CallActivation> call_activations_;
 
   /**
-   * Interpreter context used for execution.
+   * Bytecode function used for execution.
    */
-  const InterpreterContext &context_;
+  const BytecodeFunction &bytecode_function_;
 
  private:
   // This class cannot be copy or move-constructed
-  DISALLOW_COPY_AND_MOVE(QueryInterpreter);
+  DISALLOW_COPY_AND_MOVE(BytecodeInterpreter);
 };
 
 }  // namespace interpreter

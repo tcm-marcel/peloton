@@ -2,9 +2,9 @@
 //
 //                         Peloton
 //
-// context_builder.h
+// bytecode_builder.h
 //
-// Identification: src/include/codegen/interpreter/context_builder.h
+// Identification: src/include/codegen/interpreter/bytecode_builder.h
 //
 // Copyright (c) 2015-2018, Carnegie Mellon University Database Group
 //
@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "codegen/interpreter/interpreter_context.h"
+#include "codegen/interpreter/bytecode_function.h"
 
 #include <ffi.h>
 #include <llvm/ADT/PostOrderIterator.h>
@@ -24,7 +24,6 @@
 #include <memory>
 #include <tuple>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace peloton {
@@ -34,24 +33,24 @@ class CodeContext;
 
 namespace interpreter {
 
-class ContextBuilder {
+class BytecodeBuilder {
  public:
   /**
-   * Static method to create a interpreter context from a code context.
+   * Static method to create a bytecode function from a code context.
    * @param code_context CodeContext containing the LLVM function
    * @param function LLVM function that shall be interpreted later
-   * @return A InterpreterContext object that can be passed to the Query
-   * Interpreter (several times).
+   * @return A BytecodeFunction object that can be passed to the
+   * BytecodeInterpreter (several times).
    */
-  static InterpreterContext CreateInterpreterContext(
+  static BytecodeFunction CreateBytecodeFunction(
       const CodeContext &code_context, const llvm::Function *function);
 
  private:
   // These types definitions have the purpose to make the code better
-  // understandable. The context builder creates indexes to identify the
+  // understandable. The bytecode builder creates indexes to identify the
   // LLVM types, which usually are only accessed by raw pointers.
   // Those types shall indicate which index is meant by a function.
-  // None of these indexes end up in the interpreter context!
+  // None of these indexes end up in the bytecode function!
   using value_index_t = index_t;
   using instruction_index_t = index_t;
 
@@ -68,23 +67,12 @@ class ContextBuilder {
   } BytecodeRelocation;
 
   /**
-   * Describes the liveness of a value (every value that has a value index),
-   * defined by start and end instruction index. Usually start is the definition
-   * and end ist the last usage.
+   * Describes the liveness of a value by start and end instruction index.
    */
-  typedef struct {
-    instruction_index_t start;
-    instruction_index_t end;
-  } ValueLiveness;
-
-  /**
-   * NULL-value for liveness information
-   */
-  static const index_t valueLivenessUnknown =
-      std::numeric_limits<index_t>::max();
+  using ValueLiveness = std::pair<index_t, index_t>;
 
  private:
-  ContextBuilder(const CodeContext &code_context,
+  BytecodeBuilder(const CodeContext &code_context,
                  const llvm::Function *function);
 
   /**
@@ -106,12 +94,6 @@ class ContextBuilder {
   void PerformGreedyRegisterAllocation();
 
   /**
-   * Helper function that ensures, that no values overlap in the same slot
-   * in the value mapping created by the register allocation.
-   */
-  void ValidateRegisterMapping();
-
-  /**
    * Dump the collected liveness information in csv format for debugging
    * @return string with csv formatted values
    */
@@ -123,25 +105,22 @@ class ContextBuilder {
   void TranslateFunction();
 
   /**
-   * Do some final conversations to make the created InterpreterContext usable.
+   * Do some final conversations to make the created BytecodeFunction usable.
    */
   void Finalize();
 
  private:
+  //===--------------------------------------------------------------------===//
+  // Methods for Value Handling
+  //===--------------------------------------------------------------------===//
+
   /**
-   * Create a unique value index for a given LLVM value. This function is meant
-   * to be called only once per LLVM Value.
-   * @param value LLVM Value
-   * @return a new unique value index for this LLVM value
-   */
-  value_index_t CreateValueIndex(const llvm::Value *value, instruction_index_t instruction_index);
-  /**
-   * Get the value index for a given LLVM value. The value index must have been
-   * created with CreateValueIndex before.
+   * Gets the value index for a given LLVM value. If no value index exists
+   * for this LLVM value, a new one is created.
    * @param value LLVM Value
    * @return the value index that is mapped to this LLVM value
    */
-  value_index_t GetValueIndex(const llvm::Value *value) const;
+  value_index_t GetValueIndex(const llvm::Value *value);
 
   /**
    * Maps a given LLVM value to the same value index as another LLVM Value.
@@ -153,15 +132,16 @@ class ContextBuilder {
   value_index_t CreateValueAlias(const llvm::Value *alias,
                                  value_index_t value_index);
 
+  // TODO
   /**
-   * Add a LLVM constant to this interpreter context. This function is meant
+   * Adds a LLVM constant to this bytecode function. This function is meant
    * to be called once per LLVM Constant.
    * @param constant LLVM constant
    * @return a value index that refers to a constant with the same value. If
    * no internal constant with this value exists before, a new value index
    * is created.
    */
-  value_index_t AddConstant(const llvm::Constant *constant);
+  value_index_t GetConstantIndex(const llvm::Constant *constant);
 
   /**
    * Returns the value slot (register) for a given value index
@@ -171,30 +151,13 @@ class ContextBuilder {
   index_t GetValueSlot(value_index_t value_index) const;
 
   /**
-   * Wrapper for GetValueSlot(value_index) that also does the index lookup
+   * Wrapper for GetValueSlot(value_index) that also does the index lookup.
+   * Index must already exist when using this function!
    */
   index_t GetValueSlot(const llvm::Value *value) const;
 
-  /**
-   * Adds a definition time to a values liveness record. This function
-   * is meant to be called only once per value. (cmp. SSA property)
-   * @param value_index value index identifying the value
-   * @param definition instruction index of the definition
-   */
-  void AddValueDefinition(value_index_t value_index,
-                          instruction_index_t definition);
-
-  /**
-   * Adds a usage time to a values liveness record. This function can be
-   * called for every usage, the latest one will be kept.
-   * @param value_index value index identifying the value
-   * @param usage instruction index of the definition
-   */
-  void AddValueUsage(value_index_t value_index, instruction_index_t usage);
-
-
   // TODO
-  void ExtendValueLifetime(value_index_t value_index, ContextBuilder::instruction_index_t instruction_index);
+  void ExtendValueLiveness(const llvm::Value *llvm_value, instruction_index_t instruction_index);
 
   /**
    * Returns the index for a additional temporary value slot in that
@@ -209,12 +172,16 @@ class ContextBuilder {
    */
   index_t GetTemporaryValueSlot(const llvm::BasicBlock *bb);
 
+  //===--------------------------------------------------------------------===//
+  // Helper Functions (const)
+  //===--------------------------------------------------------------------===//
+
   /**
    * Returns the matching FFI type for a given LLVM type
    * @param type LLVM type
    * @return FFI type
    */
-  ffi_type *GetFFIType(llvm::Type *type);
+  ffi_type *GetFFIType(llvm::Type *type) const;
 
   /**
    * Checks if a LLVM Value is a constant
@@ -298,6 +265,11 @@ class ContextBuilder {
   Opcode GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
                                       llvm::Type *type) const;
 
+
+  //===--------------------------------------------------------------------===//
+  // Methods for creating Bytecode Instructions
+  //===--------------------------------------------------------------------===//
+
   /**
    * Insert abytecode instruction with up to 6 arguments into the bytecode
    * stream.
@@ -350,8 +322,8 @@ class ContextBuilder {
    * Insert a internal call bytecode instruction into the bytecode stream.
    * @param llvm_instruction LLVM function this instruction is created from.
    * (Only needed for tracing information, not used in Release mode!)
-   * @param sub_context index to the sub context (interpreter context) created
-   * for this internal call instruction
+   * @param sub_function index to the sub function (bytecode function) for
+   * this LLVM function
    * @param dest_slot Destination slot for the return value. Set zero if
    * internal function returns void.
    * @param number_arguments number of arguments provided in this function call.
@@ -360,7 +332,7 @@ class ContextBuilder {
    * @return Reference to the created instruction in the bytecode stream.
    */
   InternalCallInstruction &InsertBytecodeInternalCallInstruction(
-      const llvm::Instruction *llvm_instruction, index_t sub_context,
+      const llvm::Instruction *llvm_instruction, index_t sub_function,
       index_t dest_slot, size_t number_arguments);
 
 /**
@@ -380,16 +352,18 @@ class ContextBuilder {
       UNUSED_ATTRIBUTE size_t number_instruction_slots = 1) {}
 #endif
 
+  //===--------------------------------------------------------------------===//
+  // Methods for Translating LLVM Instructions (called by TranslateFunction())
+  //===--------------------------------------------------------------------===//
+
   /**
    * Resolves the PHI nodes referring to this basic block, by placing mov
    * instructions. Must be called just before the terminating LLVM instruction
-   * in basic block. If the PHI swap / lost copy problem can occur, the
-   * function creates additional mov instructions.
+   * in a basic block. If the PHI swap / lost copy problem can occur, the
+   * function creates additional mov instructions and value slots.
    * @param bb current basic block
    */
   void ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb);
-
-  // Following functions get called by the
 
   void TranslateBranch(const llvm::Instruction *instruction,
                        std::vector<BytecodeRelocation> &bytecode_relocations);
@@ -408,25 +382,25 @@ class ContextBuilder {
 
  private:
   /**
-   *  The interpreter context that is created (and then moved). All other
+   *  The bytecode function that is created (and then moved). All other
    * members are helping data structures that don't end up in the resulting
-   * context
+   * bytecode function
    */
-  InterpreterContext context_;
+  BytecodeFunction bytecode_function_;
 
   /**
    * Mapping from Value* to internal value index (includes merged
-   * values/constants). Value index is used to access the vectors below.
+   * values/constants). The value index is used to access the vectors below.
    */
   std::unordered_map<const llvm::Value *, value_index_t> value_mapping_;
 
   /**
-   * Holds the liveness of each value (use/def)
+   * Holds the value liveness per value (after analysis)
    */
   std::vector<ValueLiveness> value_liveness_;
 
   /**
-   * Holds the assigned value slot (from register allocation)
+   * Holds the assigned value slot per value (after register allocation)
    */
   std::vector<index_t> value_slots_;
 
@@ -440,11 +414,6 @@ class ContextBuilder {
    * Holds all constants, their actual values and their value index
    */
   std::vector<std::pair<value_t, value_index_t>> constants_;
-
-  /**
-   * Maximum instruction index = highest possible liveness value
-   */
-  instruction_index_t instruction_index_max_;
 
   /**
    * Additional temporary value slots (created due to phi swap problem).
@@ -470,10 +439,10 @@ class ContextBuilder {
       overflow_results_mapping_;
 
   /**
-   * Mapping of functions to subcontexts to avoid duplicated contexts
-   * if a internal function is called several times
+   * Mapping of LLVM functions to bytecode functions to avoid duplicated
+   * functions in case a internal function is called several times
    */
-  std::unordered_map<const llvm::Function *, index_t> sub_context_mapping_;
+  std::unordered_map<const llvm::Function *, index_t> sub_function_mapping_;
 
   /**
    * ReversePostOrderTraversal, which is used for all BB traversals
@@ -490,7 +459,7 @@ class ContextBuilder {
   std::vector<const llvm::BasicBlock *> bb_reverse_post_order_;
 
   /**
-   * Original code context the context is build from
+   * Original code context the bytecode function is build from
    */
   const CodeContext &code_context_;
 

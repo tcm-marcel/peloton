@@ -2,15 +2,15 @@
 //
 //                         Peloton
 //
-// interpreter_context.cpp
+// bytecode_function.cpp
 //
-// Identification: src/codegen/interpreter/interpreter_context.cpp
+// Identification: src/codegen/interpreter/bytecode_function.cpp
 //
 // Copyright (c) 2015-2018, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
 
-#include "codegen/interpreter/interpreter_context.h"
+#include "codegen/interpreter/bytecode_function.h"
 #include "codegen/codegen.h"
 
 #include <iomanip>
@@ -22,7 +22,7 @@ namespace peloton {
 namespace codegen {
 namespace interpreter {
 
-const char *InterpreterContext::GetOpcodeString(Opcode opcode) {
+const char *BytecodeFunction::GetOpcodeString(Opcode opcode) {
   switch (opcode) {
 #define HANDLE_INST(opcode) \
   case Opcode::opcode:      \
@@ -38,13 +38,13 @@ const char *InterpreterContext::GetOpcodeString(Opcode opcode) {
 }
 
 #ifndef NDEBUG
-const llvm::Instruction *InterpreterContext::GetIRInstructionFromIP(
+const llvm::Instruction *BytecodeFunction::GetIRInstructionFromIP(
     index_t instr_slot) const {
   return instruction_trace_.at(instr_slot);
 }
 #endif
 
-size_t InterpreterContext::GetInstructionSlotSize(
+size_t BytecodeFunction::GetInstructionSlotSize(
     const Instruction *instruction) {
   switch (instruction->op) {
 #define HANDLE_INST(op) \
@@ -72,7 +72,7 @@ size_t InterpreterContext::GetInstructionSlotSize(
   }
 }
 
-void InterpreterContext::DumpContents() const {
+void BytecodeFunction::DumpContents() const {
   std::ofstream output;
   output.open(std::string("dump") + function_name_ + ".bf");
 
@@ -113,7 +113,7 @@ void InterpreterContext::DumpContents() const {
   output.close();
 }
 
-std::string InterpreterContext::Dump(const Instruction *instruction) const {
+std::string BytecodeFunction::Dump(const Instruction *instruction) const {
   std::ostringstream output;
   output << "[" << std::setw(3) << GetIndexFromIP(instruction) << "] ";
   output << std::setw(18) << GetOpcodeString(instruction->op) << " ";

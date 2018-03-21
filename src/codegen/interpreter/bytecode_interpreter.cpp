@@ -2,16 +2,16 @@
 //
 //                         Peloton
 //
-// query_interpreter.cpp
+// bytecode_interpreter.cpp
 //
-// Identification: src/codegen/interpreter/query_interpreter.cpp
+// Identification: src/codegen/interpreter/bytecode_interpreter.cpp
 //
 // Copyright (c) 2015-2018, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
 
-#include "codegen/interpreter/query_interpreter.h"
-#include "codegen/interpreter/interpreter_context.h"
+#include "codegen/interpreter/bytecode_interpreter.h"
+#include "codegen/interpreter/bytecode_function.h"
 
 // DEBUG
 #define LOG_TRACE_ENABLED
@@ -24,7 +24,7 @@ namespace interpreter {
  *  in the label_pointers_ array and performs a direct jump there.
  */
 #define INTERPRETER_DISPATCH_GOTO(ip)                     \
-  goto *(label_pointers_[InterpreterContext::GetOpcodeId( \
+  goto *(label_pointers_[BytecodeFunction::GetOpcodeId( \
       reinterpret_cast<const Instruction *>(ip)->op)])
 
 /**
@@ -32,34 +32,34 @@ namespace interpreter {
  * that we fill it with the actual values on the first execution.
  */
 void
-    *QueryInterpreter::label_pointers_[InterpreterContext::GetNumberOpcodes()] =
+    *BytecodeInterpreter::label_pointers_[BytecodeFunction::GetNumberOpcodes()] =
         {nullptr};
 
-QueryInterpreter::QueryInterpreter(const InterpreterContext &context)
-    : context_(context) {}
+BytecodeInterpreter::BytecodeInterpreter(const BytecodeFunction &bytecode_function)
+    : bytecode_function_(bytecode_function) {}
 
-value_t QueryInterpreter::ExecuteFunction(
-    const InterpreterContext &context, const std::vector<value_t> &arguments) {
-  QueryInterpreter interpreter(context);
+value_t BytecodeInterpreter::ExecuteFunction(
+    const BytecodeFunction &bytecode_function, const std::vector<value_t> &arguments) {
+  BytecodeInterpreter interpreter(bytecode_function);
   interpreter.ExecuteFunction(arguments);
 
   return interpreter.GetReturnValue<value_t>();
 }
 
-void QueryInterpreter::ExecuteFunction(const InterpreterContext &context,
+void BytecodeInterpreter::ExecuteFunction(const BytecodeFunction &bytecode_function,
                                        char *param) {
-  QueryInterpreter interpreter(context);
+  BytecodeInterpreter interpreter(bytecode_function);
   interpreter.ExecuteFunction({reinterpret_cast<value_t &>(param)});
 }
 
 __attribute__((__noinline__, __noclone__)) void
-QueryInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
+BytecodeInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
   // Fill the value_pointers_ array with the handler addresses at first
   // startup. (This can't be done outside of this function, as the labels are
   // not visible there.
   if (label_pointers_[0] == nullptr) {
 #define HANDLE_INST(op) \
-  label_pointers_[InterpreterContext::GetOpcodeId(Opcode::op)] = &&_##op;
+  label_pointers_[BytecodeFunction::GetOpcodeId(Opcode::op)] = &&_##op;
 
 #include "codegen/interpreter/bytecode_instructions.def"
   }
@@ -68,7 +68,7 @@ QueryInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
 
   // Get initial instruction pointer
   const Instruction *bytecode =
-      reinterpret_cast<const Instruction *>(&context_.bytecode_[0]);
+      reinterpret_cast<const Instruction *>(&bytecode_function_.bytecode_[0]);
   const Instruction *ip = bytecode;
 
   // Start execution with first instruction
@@ -89,7 +89,7 @@ QueryInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
 //--------------------------------------------------------------------------//
 
 #ifdef LOG_TRACE_ENABLED
-#define TRACE_CODE_PRE LOG_TRACE("%s", context_.Dump(ip).c_str())
+#define TRACE_CODE_PRE LOG_TRACE("%s", bytecode_function_.Dump(ip).c_str())
 #else
 #define TRACE_CODE_PRE
 #endif
@@ -116,38 +116,38 @@ QueryInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
 }
 
 template <typename type_t>
-type_t QueryInterpreter::GetReturnValue() {
+type_t BytecodeInterpreter::GetReturnValue() {
   // the ret instruction saves the return value in value slot 0 by definition
   return GetValue<type_t>(0);
 }
 
-void QueryInterpreter::InitializeActivationRecord(
+void BytecodeInterpreter::InitializeActivationRecord(
     const std::vector<value_t> &arguments) {
   // resize vector to required number of value slots
-  values_.resize(context_.number_values_);
+  values_.resize(bytecode_function_.number_values_);
 
   // fill in constants
-  for (auto &constant : context_.constants_) {
+  for (auto &constant : bytecode_function_.constants_) {
     SetValue<value_t>(constant.second, constant.first);
   }
 
   // check if provided number or arguments matches the number required by
   // the function
-  if (context_.function_arguments_.size() != arguments.size()) {
+  if (bytecode_function_.function_arguments_.size() != arguments.size()) {
     throw Exception(
         "llvm function called through interpreter with wrong number of "
         "arguments");
   }
 
   // fill in function arguments
-  for (unsigned int i = 0; i < context_.function_arguments_.size(); i++) {
-    SetValue<value_t>(context_.function_arguments_[i], arguments[i]);
+  for (unsigned int i = 0; i < bytecode_function_.function_arguments_.size(); i++) {
+    SetValue<value_t>(bytecode_function_.function_arguments_[i], arguments[i]);
   }
 
   // prepare call activations
-  call_activations_.resize(context_.external_call_contexts_.size());
-  for (size_t i = 0; i < context_.external_call_contexts_.size(); i++) {
-    auto &call_context = context_.external_call_contexts_[i];
+  call_activations_.resize(bytecode_function_.external_call_contexts_.size());
+  for (size_t i = 0; i < bytecode_function_.external_call_contexts_.size(); i++) {
+    auto &call_context = bytecode_function_.external_call_contexts_[i];
     auto &call_activation = call_activations_[i];
 
     // initialize libffi call interface
@@ -166,7 +166,7 @@ void QueryInterpreter::InitializeActivationRecord(
   }
 }
 
-uintptr_t QueryInterpreter::AllocateMemory(size_t number_bytes) {
+uintptr_t BytecodeInterpreter::AllocateMemory(size_t number_bytes) {
   // allocate memory
   std::unique_ptr<char[]> pointer =
       std::unique_ptr<char[]>(new char[number_bytes]);

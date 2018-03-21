@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "codegen/query.h"
-#include "codegen/interpreter/context_builder.h"
-#include "codegen/interpreter/query_interpreter.h"
+#include "codegen/interpreter/bytecode_builder.h"
+#include "codegen/interpreter/bytecode_interpreter.h"
 #include "codegen/query_compiler.h"
 #include "codegen/query_result_consumer.h"
 #include "common/timer.h"
@@ -197,14 +197,14 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   }
 
   // Create Bytecode
-  interpreter::InterpreterContext init_bytecode =
-      interpreter::ContextBuilder::CreateInterpreterContext(
+  interpreter::BytecodeFunction init_bytecode =
+      interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, query_funcs_.init_func);
-  interpreter::InterpreterContext plan_bytecode =
-      interpreter::ContextBuilder::CreateInterpreterContext(
+  interpreter::BytecodeFunction plan_bytecode =
+      interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, query_funcs_.plan_func);
-  interpreter::InterpreterContext tear_down_bytecode =
-      interpreter::ContextBuilder::CreateInterpreterContext(
+  interpreter::BytecodeFunction tear_down_bytecode =
+      interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, query_funcs_.tear_down_func);
 
   // Time initialization
@@ -218,10 +218,10 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   // Call init
   LOG_TRACE("Calling query's init() ...");
   try {
-    interpreter::QueryInterpreter::ExecuteFunction(
+    interpreter::BytecodeInterpreter::ExecuteFunction(
         init_bytecode, reinterpret_cast<char *>(function_arguments));
   } catch (...) {
-    interpreter::QueryInterpreter::ExecuteFunction(
+    interpreter::BytecodeInterpreter::ExecuteFunction(
         tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
     throw;
   }
@@ -236,10 +236,10 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
-    interpreter::QueryInterpreter::ExecuteFunction(
+    interpreter::BytecodeInterpreter::ExecuteFunction(
         plan_bytecode, reinterpret_cast<char *>(function_arguments));
   } catch (...) {
-    interpreter::QueryInterpreter::ExecuteFunction(
+    interpreter::BytecodeInterpreter::ExecuteFunction(
         tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
     throw;
   }
@@ -254,7 +254,7 @@ bool Query::Interpret(FunctionArguments *function_arguments,
 
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
-  interpreter::QueryInterpreter::ExecuteFunction(
+  interpreter::BytecodeInterpreter::ExecuteFunction(
       tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
 
   // No need to cleanup if we get an exception while cleaning up...

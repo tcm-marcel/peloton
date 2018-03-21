@@ -35,7 +35,7 @@ namespace codegen {
 class FunctionBuilder;
 
 namespace interpreter {
-class ContextBuilder;
+class BytecodeBuilder;
 }
 
 //===----------------------------------------------------------------------===//
@@ -48,7 +48,7 @@ class CodeContext {
   friend class CodeGen;
   friend class FunctionBuilder;
   friend class PelotonMM;
-  friend class interpreter::ContextBuilder;
+  friend class interpreter::BytecodeBuilder;
 
  public:
   using FuncPtr = void *;

@@ -2,9 +2,9 @@
 //
 //                         Peloton
 //
-// interpreter_context.h
+// bytecode_function.h
 //
-// Identification: src/include/codegen/interpreter/interpreter_context.h
+// Identification: src/include/codegen/interpreter/bytecode_function.h
 //
 // Copyright (c) 2015-2018, Carnegie Mellon University Database Group
 //
@@ -30,8 +30,8 @@ class CodeContext;
 
 namespace interpreter {
 
-class QueryInterpreter;
-class ContextBuilder;
+class BytecodeInterpreter;
+class BytecodeBuilder;
 
 // Type definitions to match the LLVM terminology
 using i8 = uint8_t;
@@ -77,7 +77,7 @@ typedef struct {
  */
 typedef struct {
   Opcode op;
-  index_t sub_context;
+  index_t sub_function;
   index_t dest_slot;
   index_t number_args;
   index_t args[];
@@ -110,12 +110,12 @@ typedef struct {
 } ExternalCallContext;
 
 /**
- * A InterpreterContext contains all information necessary to run a LLVM
+ * A BytecodeFunction contains all information necessary to run a LLVM
  * function in the interpreter and is completely independent from the
  * CodeContext it was created from (except for the tracing information in debug
  * mode). It can be moved and copied.
  */
-class InterpreterContext {
+class BytecodeFunction {
  public:
   /**
    * Returns the Opcode enum for a given Opcode Id (to avoid plain casting)
@@ -153,7 +153,7 @@ class InterpreterContext {
 
   /**
    * Return the instruction pointer to a given instruction index (from this
-   * context)
+   * bytecode function)
    * @param index instruction index
    * @return pointer to the instruction at that index inside the bytecode
    */
@@ -164,7 +164,7 @@ class InterpreterContext {
 
   /**
    * Returns the instruction index for a given instruction pointer (from this
-   * context)
+   * bytecode function)
    * @param instruction pointer to a given instruction inside the bytecode
    * @return index to the instruction the pointer is pointing to
    */
@@ -204,7 +204,7 @@ class InterpreterContext {
   }
 
   /***
-   * Dumps the bytecode and the constants of this interpreter context to a
+   * Dumps the bytecode and the constants of this bytecode function to a
    * file, identified by function name.
    */
   void DumpContents() const;
@@ -212,18 +212,18 @@ class InterpreterContext {
   /**
    * Gives a textual representation of the given instruction. (and the
    * LLVM instruction it originates from, if Debug mode is enabled)
-   * @param instruction instruction of this context
+   * @param instruction instruction from this bytecode function
    * @return string containing a textual representatino of the instruction
    */
   std::string Dump(const Instruction *instruction) const;
 
  private:
   /**
-   * Creates a new empty interpreter context object.
-   * @param id identifier for this interpreter context, usually inherited
+   * Creates a new empty BytecodeFunction object.
+   * @param id identifier for this bytecode function, usually inherited
    * from code context.
    */
-  InterpreterContext(std::string function_name) : function_name_(function_name) {}
+  BytecodeFunction(std::string function_name) : function_name_(function_name) {}
 
  private:
   /**
@@ -269,10 +269,10 @@ class InterpreterContext {
   std::vector<ExternalCallContext> external_call_contexts_;
 
   /**
-   * Hierarchical array of further instruction contexts belonging to
+   * Hierarchical array of further bytecode functions belonging to
    * InteralFunctionCalls, accessed by index.
    */
-  std::vector<InterpreterContext> sub_contexts_;
+  std::vector<BytecodeFunction> sub_functions_;
 
 #ifndef NDEBUG
   /**
@@ -283,8 +283,8 @@ class InterpreterContext {
 #endif
 
  private:
-  friend QueryInterpreter;
-  friend ContextBuilder;
+  friend BytecodeInterpreter;
+  friend BytecodeBuilder;
 };
 
 }  // namespace interpreter
