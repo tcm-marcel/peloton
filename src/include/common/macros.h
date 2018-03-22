@@ -30,6 +30,12 @@ namespace peloton {
 
 #define NEVER_INLINE __attribute__((noinline))
 
+#ifdef __clang__
+#define NO_CLONE
+#else
+#define NO_CLONE __attribute__((noclone))
+#endif
+
 // DEBUG
 #ifdef NDEBUG
 #define ALWAYS_INLINE __attribute__((always_inline))

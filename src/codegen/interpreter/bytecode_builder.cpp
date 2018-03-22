@@ -309,7 +309,7 @@ value_t BytecodeBuilder::GetConstantValue(const llvm::Constant *constant) const 
           }
         }
 
-        PELOTON_FALLTHROUGH
+        PELOTON_FALLTHROUGH;
       }
 
       default:

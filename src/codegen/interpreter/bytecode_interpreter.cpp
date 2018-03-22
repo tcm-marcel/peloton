@@ -52,7 +52,7 @@ void BytecodeInterpreter::ExecuteFunction(const BytecodeFunction &bytecode_funct
   interpreter.ExecuteFunction({reinterpret_cast<value_t &>(param)});
 }
 
-__attribute__((__noinline__, __noclone__)) void
+NEVER_INLINE NO_CLONE void
 BytecodeInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
   // Fill the value_pointers_ array with the handler addresses at first
   // startup. (This can't be done outside of this function, as the labels are
