@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <codegen/testing_codegen_util.h>
 #include <cstdlib>
 #include <unordered_set>
 #include <vector>
@@ -18,10 +19,10 @@
 #include "codegen/codegen.h"
 #include "codegen/counting_consumer.h"
 #include "codegen/function_builder.h"
-#include "codegen/query_parameters.h"
 #include "codegen/lang/if.h"
 #include "codegen/lang/loop.h"
 #include "codegen/proxy/bloom_filter_proxy.h"
+#include "codegen/query_parameters.h"
 #include "codegen/testing_codegen_util.h"
 #include "codegen/util/bloom_filter.h"
 #include "common/timer.h"
@@ -36,7 +37,7 @@
 namespace peloton {
 namespace test {
 
-class BloomFilterCodegenTest : public PelotonTest {
+class BloomFilterCodegenTest : public PelotonCodeGenTest {
  public:
   BloomFilterCodegenTest() {
     // Create test db
@@ -167,7 +168,7 @@ TEST_F(BloomFilterCodegenTest, FalsePositiveRateTest) {
 
   ASSERT_TRUE(code_context.Compile());
 
-  typedef void (*ftype)(codegen::util::BloomFilter *bloom_filter, int *, int,
+  typedef void (*ftype)(codegen::util::BloomFilter * bloom_filter, int *, int,
                         int *);
   ftype f = (ftype)code_context.GetRawFunctionPointer(func.GetFunction());
 
@@ -299,6 +300,7 @@ double BloomFilterCodegenTest::ExecuteJoin(std::string query,
     plan->PerformBinding(context);
     // Use simple CountConsumer since we don't care about the result
     codegen::CountingConsumer consumer;
+
     // Compile the query
     codegen::QueryCompiler compiler;
     codegen::Query::RuntimeStats stats;
@@ -306,10 +308,10 @@ double BloomFilterCodegenTest::ExecuteJoin(std::string query,
         new executor::ExecutorContext{txn});
     auto compiled_query = compiler.Compile(
         *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
-
+    compiled_query->Compile();
     // Run
-    PelotonCodeGenTest::ExecuteSync(*compiled_query,
-                                    std::move(executor_context), consumer);
+    stats = PelotonCodeGenTest::ExecuteSync(
+        *compiled_query, std::move(executor_context), consumer);
 
     LOG_INFO("Execution Time: %0.0f ms", stats.plan_ms);
     total_runtime += stats.plan_ms;

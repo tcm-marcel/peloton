@@ -50,20 +50,29 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   func_args->query_parameters = &executor_context->GetParams();
   func_args->consumer_arg = consumer.GetConsumerState();
 
+  // DEBUG
   // bool force_interpreter =
   // settings::SettingsManager::GetBool(settings::SettingId::codegen_interpreter);
   bool force_interpreter = true;
-  if (force_interpreter) {
-    try {
-      Interpret(func_args, stats);
-    } catch (interpreter::NotSupportedException e) {
-      // DEBUG
-      LOG_INFO("query not supported by interpreter: %s", e.what());
 
-      CompileAndExecute(func_args, stats);
-    }
+  if (is_compiled_ && !force_interpreter) {
+    ExecuteNative(func_args, stats);
   } else {
-    CompileAndExecute(func_args, stats);
+    try {
+      ExecuteInterpreter(func_args, stats);
+    } catch (interpreter::NotSupportedException e) {
+      LOG_ERROR("query not supported by interpreter: %s", e.what());
+
+      // DEBUG
+      ExecuteNative(func_args, stats);
+
+      /*
+      executor::ExecutionResult result;
+      result.m_result = ResultType::INVALID;
+      on_complete(result);
+      return;
+      */
+    }
   }
 
   executor::ExecutionResult result;
@@ -72,8 +81,8 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   on_complete(result);
 }
 
-void Query::Prepare(const QueryFunctions &query_funcs) {
-  query_funcs_ = query_funcs;
+void Query::Prepare(const LLVMFunctions &query_funcs) {
+  llvm_functions_ = query_funcs;
 
   // verify the functions
   // will also be done by Optimize() or Compile() if not done before,
@@ -85,54 +94,60 @@ void Query::Prepare(const QueryFunctions &query_funcs) {
   // TODO(marcel): add timer to measure time used for optimization (see
   // RuntimeStats)
   code_context_.Optimize();
+
+  is_compiled_ = false;
 }
 
-bool Query::CompileAndExecute(FunctionArguments *function_arguments,
-                              RuntimeStats *stats) {
+bool Query::Compile(CompileStats *stats) {
   // Timer
   Timer<std::ratio<1, 1000>> timer;
   if (stats != nullptr) {
     timer.Start();
   }
 
-  // Step 1: Compile all functions in context
-  LOG_TRACE("Setting up Query ...");
+  // Compile all functions in context
+  LOG_TRACE("Starting Query compilation ...");
 
   // TODO(marcel): for now Compile() will always return true, find a way to
-  // catch
-  // compilation errors from LLVM
+  // catch compilation errors from LLVM
   if (!code_context_.Compile()) {
     return false;
   }
 
   // Get pointers to the JITed functions
-  compiled_function_t init_func_ptr =
+  compiled_functions_.init_func =
       (compiled_function_t)code_context_.GetRawFunctionPointer(
-          query_funcs_.init_func);
-  PL_ASSERT(init_func_ptr != nullptr);
+          llvm_functions_.init_func);
+  PL_ASSERT(compiled_functions_.init_func != nullptr);
 
-  compiled_function_t plan_func_ptr =
+  compiled_functions_.plan_func =
       (compiled_function_t)code_context_.GetRawFunctionPointer(
-          query_funcs_.plan_func);
-  PL_ASSERT(plan_func_ptr != nullptr);
+          llvm_functions_.plan_func);
+  PL_ASSERT(compiled_functions_.plan_func != nullptr);
 
-  compiled_function_t tear_down_func_ptr =
+  compiled_functions_.tear_down_func =
       (compiled_function_t)code_context_.GetRawFunctionPointer(
-          query_funcs_.tear_down_func);
-  PL_ASSERT(tear_down_func_ptr != nullptr);
+          llvm_functions_.tear_down_func);
+  PL_ASSERT(compiled_functions_.tear_down_func != nullptr);
 
-  LOG_TRACE("Query has been setup ...");
+  is_compiled_ = true;
+
+  LOG_TRACE("Compilation finished.");
 
   // Timer for JIT compilation
   if (stats != nullptr) {
     timer.Stop();
-    stats->jit_compile_ms = timer.GetDuration();
+    stats->compile_ms = timer.GetDuration();
     timer.Reset();
   }
 
-  // Step 2: Execute query
+  return true;
+}
 
+bool Query::ExecuteNative(FunctionArguments *function_arguments,
+                          RuntimeStats *stats) {
   // Start timer
+  Timer<std::ratio<1, 1000>> timer;
   if (stats != nullptr) {
     timer.Start();
   }
@@ -140,10 +155,10 @@ bool Query::CompileAndExecute(FunctionArguments *function_arguments,
   // Call init
   LOG_TRACE("Calling query's init() ...");
   try {
-    init_func_ptr(function_arguments);
+    compiled_functions_.init_func(function_arguments);
   } catch (...) {
     // Cleanup if an exception is encountered
-    tear_down_func_ptr(function_arguments);
+    compiled_functions_.tear_down_func(function_arguments);
     throw;
   }
 
@@ -158,10 +173,10 @@ bool Query::CompileAndExecute(FunctionArguments *function_arguments,
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
-    plan_func_ptr(function_arguments);
+    compiled_functions_.plan_func(function_arguments);
   } catch (...) {
     // Cleanup if an exception is encountered
-    tear_down_func_ptr(function_arguments);
+    compiled_functions_.tear_down_func(function_arguments);
     throw;
   }
 
@@ -175,7 +190,7 @@ bool Query::CompileAndExecute(FunctionArguments *function_arguments,
 
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
-  tear_down_func_ptr(function_arguments);
+  compiled_functions_.tear_down_func(function_arguments);
 
   // No need to cleanup if we get an exception while cleaning up...
   if (stats != nullptr) {
@@ -186,8 +201,8 @@ bool Query::CompileAndExecute(FunctionArguments *function_arguments,
   return true;
 }
 
-bool Query::Interpret(FunctionArguments *function_arguments,
-                      RuntimeStats *stats) {
+bool Query::ExecuteInterpreter(FunctionArguments *function_arguments,
+                               RuntimeStats *stats) {
   LOG_INFO("Using codegen interpreter to execute plan");
 
   // Timer
@@ -199,18 +214,18 @@ bool Query::Interpret(FunctionArguments *function_arguments,
   // Create Bytecode
   interpreter::BytecodeFunction init_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
-          code_context_, query_funcs_.init_func);
+          code_context_, llvm_functions_.init_func);
   interpreter::BytecodeFunction plan_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
-          code_context_, query_funcs_.plan_func);
+          code_context_, llvm_functions_.plan_func);
   interpreter::BytecodeFunction tear_down_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
-          code_context_, query_funcs_.tear_down_func);
+          code_context_, llvm_functions_.tear_down_func);
 
   // Time initialization
   if (stats != nullptr) {
     timer.Stop();
-    stats->bytecode_compile_ms = timer.GetDuration();
+    stats->interpreter_prepare_ms = timer.GetDuration();
     timer.Reset();
     timer.Start();
   }
