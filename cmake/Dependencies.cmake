@@ -84,7 +84,7 @@ list(APPEND Peloton_LINKER_LIBS ${LLVM_LIBRARIES})
 
 # --[ FFI
 find_package(Libffi)
-include_directories(SYSTEM ${LIBFFI_INCLUDE_PATH})
+include_directories(SYSTEM ${LIBFFI_INCLUDE_DIRS})
 list(APPEND Peloton_LINKER_LIBS ${LIBFFI_LIBRARIES})
 
 # --[ IWYU
