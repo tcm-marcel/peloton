@@ -237,15 +237,14 @@ class BytecodeFunction {
   size_t number_values_;
 
   /**
-   * Constants needed during runtime and the value slot they belong.
+   * Number of function arguments (to check correct number given to interpreter)
    */
-  std::vector<std::pair<value_t, index_t> > constants_;
+  size_t number_function_arguments_;
 
   /**
-   * Holds the value slots in which the function arguments get put
-   * during runtime initialization. (accessed by argument index)
+   * Constants needed during runtime.
    */
-  std::vector<index_t> function_arguments_;
+  std::vector<value_t> constants_;
 
   /**
    * This array of instruction slots holds the actual bytecode that is
@@ -276,8 +275,8 @@ class BytecodeFunction {
 
 #ifndef NDEBUG
   /**
-   * In Debug mode: Trace mapping every bytecode instruction slot to the
-   * LLVM instruction it comes from.
+   * In Debug mode: Maps every bytecode instruction slot to the
+   * LLVM instruction it was created from.
    */
   std::vector<const llvm::Instruction *> instruction_trace_;
 #endif

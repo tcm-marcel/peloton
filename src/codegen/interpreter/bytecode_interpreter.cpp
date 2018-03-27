@@ -13,9 +13,6 @@
 #include "codegen/interpreter/bytecode_interpreter.h"
 #include "codegen/interpreter/bytecode_function.h"
 
-// DEBUG
-#define LOG_TRACE_ENABLED
-
 namespace peloton {
 namespace codegen {
 namespace interpreter {
@@ -23,7 +20,7 @@ namespace interpreter {
 /** This is the actual dispatch code: It lookups the destination handler address
  *  in the label_pointers_ array and performs a direct jump there.
  */
-#define INTERPRETER_DISPATCH_GOTO(ip)                     \
+#define INTERPRETER_DISPATCH_GOTO(ip)                   \
   goto *(label_pointers_[BytecodeFunction::GetOpcodeId( \
       reinterpret_cast<const Instruction *>(ip)->op)])
 
@@ -31,29 +28,31 @@ namespace interpreter {
  * The array with the label pointers has to be zero initialized to make sure,
  * that we fill it with the actual values on the first execution.
  */
-void
-    *BytecodeInterpreter::label_pointers_[BytecodeFunction::GetNumberOpcodes()] =
+void *
+    BytecodeInterpreter::label_pointers_[BytecodeFunction::GetNumberOpcodes()] =
         {nullptr};
 
-BytecodeInterpreter::BytecodeInterpreter(const BytecodeFunction &bytecode_function)
+BytecodeInterpreter::BytecodeInterpreter(
+    const BytecodeFunction &bytecode_function)
     : bytecode_function_(bytecode_function) {}
 
 value_t BytecodeInterpreter::ExecuteFunction(
-    const BytecodeFunction &bytecode_function, const std::vector<value_t> &arguments) {
+    const BytecodeFunction &bytecode_function,
+    const std::vector<value_t> &arguments) {
   BytecodeInterpreter interpreter(bytecode_function);
   interpreter.ExecuteFunction(arguments);
 
   return interpreter.GetReturnValue<value_t>();
 }
 
-void BytecodeInterpreter::ExecuteFunction(const BytecodeFunction &bytecode_function,
-                                       char *param) {
+void BytecodeInterpreter::ExecuteFunction(
+    const BytecodeFunction &bytecode_function, char *param) {
   BytecodeInterpreter interpreter(bytecode_function);
   interpreter.ExecuteFunction({reinterpret_cast<value_t &>(param)});
 }
 
-NEVER_INLINE NO_CLONE void
-BytecodeInterpreter::ExecuteFunction(const std::vector<value_t> &arguments) {
+NEVER_INLINE NO_CLONE void BytecodeInterpreter::ExecuteFunction(
+    const std::vector<value_t> &arguments) {
   // Fill the value_pointers_ array with the handler addresses at first
   // startup. (This can't be done outside of this function, as the labels are
   // not visible there.
@@ -126,27 +125,30 @@ void BytecodeInterpreter::InitializeActivationRecord(
   // resize vector to required number of value slots
   values_.resize(bytecode_function_.number_values_);
 
+  index_t value_slot = 1;
+
   // fill in constants
   for (auto &constant : bytecode_function_.constants_) {
-    SetValue<value_t>(constant.second, constant.first);
+    SetValue<value_t>(value_slot++, constant);
   }
 
-  // check if provided number or arguments matches the number required by
+  // check if provided number of arguments matches the number required by
   // the function
-  if (bytecode_function_.function_arguments_.size() != arguments.size()) {
+  if (bytecode_function_.number_function_arguments_ != arguments.size()) {
     throw Exception(
         "llvm function called through interpreter with wrong number of "
         "arguments");
   }
 
   // fill in function arguments
-  for (unsigned int i = 0; i < bytecode_function_.function_arguments_.size(); i++) {
-    SetValue<value_t>(bytecode_function_.function_arguments_[i], arguments[i]);
+  for (auto &argument : arguments) {
+    SetValue<value_t>(value_slot++, argument);
   }
 
   // prepare call activations
   call_activations_.resize(bytecode_function_.external_call_contexts_.size());
-  for (size_t i = 0; i < bytecode_function_.external_call_contexts_.size(); i++) {
+  for (size_t i = 0; i < bytecode_function_.external_call_contexts_.size();
+       i++) {
     auto &call_context = bytecode_function_.external_call_contexts_[i];
     auto &call_activation = call_activations_[i];
 
@@ -181,7 +183,3 @@ uintptr_t BytecodeInterpreter::AllocateMemory(size_t number_bytes) {
 }  // namespace interpreter
 }  // namespace codegen
 }  // namespace peloton
-
-
-// DEBUG
-#undef LOG_TRACE_ENABLED

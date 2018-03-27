@@ -22,7 +22,7 @@ namespace codegen {
 namespace interpreter {
 
 BytecodeBuilder::BytecodeBuilder(const CodeContext &code_context,
-                               const llvm::Function *function)
+                                 const llvm::Function *function)
     : bytecode_function_(function->getName().str()),
       number_value_slots_(0),
       number_temporary_value_slots_(0),
@@ -35,26 +35,26 @@ BytecodeFunction BytecodeBuilder::CreateBytecodeFunction(
   BytecodeBuilder builder(code_context, function);
 
   // DEBUG
-  //code_context.DumpContents();
+  // code_context.DumpContents();
 
   builder.AnalyseFunction();
-  //builder.PerformNaiveRegisterAllocation();
-  builder.PerformGreedyRegisterAllocation();
+  builder.PerformNaiveRegisterAllocation();
+  // builder.PerformGreedyRegisterAllocation();
 
   // DEBUG
-  //builder.DumpValueInformation();
+  // builder.DumpValueInformation();
 
   builder.TranslateFunction();
   builder.Finalize();
 
   // DEBUG
-  //builder.bytecode_function_.DumpContents();
+  // builder.bytecode_function_.DumpContents();
 
   return std::move(builder.bytecode_function_);
 }
 
 Opcode BytecodeBuilder::GetOpcodeForTypeAllTypes(Opcode untyped_op,
-                                                llvm::Type *type) const {
+                                                 llvm::Type *type) const {
   index_t id = BytecodeFunction::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
@@ -78,7 +78,7 @@ Opcode BytecodeBuilder::GetOpcodeForTypeAllTypes(Opcode untyped_op,
 }
 
 Opcode BytecodeBuilder::GetOpcodeForTypeIntTypes(Opcode untyped_op,
-                                                llvm::Type *type) const {
+                                                 llvm::Type *type) const {
   index_t id = BytecodeFunction::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
@@ -98,7 +98,7 @@ Opcode BytecodeBuilder::GetOpcodeForTypeIntTypes(Opcode untyped_op,
 }
 
 Opcode BytecodeBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
-                                                  llvm::Type *type) const {
+                                                   llvm::Type *type) const {
   index_t id = BytecodeFunction::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
@@ -114,7 +114,7 @@ Opcode BytecodeBuilder::GetOpcodeForTypeFloatTypes(Opcode untyped_op,
 }
 
 Opcode BytecodeBuilder::GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
-                                                    llvm::Type *type) const {
+                                                     llvm::Type *type) const {
   index_t id = BytecodeFunction::GetOpcodeId(untyped_op);
 
   // This function highly depends on the macros in bytecode_instructions.def!
@@ -146,8 +146,8 @@ Instruction &BytecodeBuilder::InsertBytecodeInstruction(
   PL_ASSERT(number_instruction_slots > 1 ||
             (arg3 == 0 && arg4 == 0 && arg5 == 0 && arg6 == 0));
 
-  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(), number_instruction_slots,
-                            0);
+  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(),
+                                      number_instruction_slots, 0);
   Instruction &instruction = *reinterpret_cast<Instruction *>(
       &*(bytecode_function_.bytecode_.end() - number_instruction_slots));
   instruction.op = opcode;
@@ -193,19 +193,21 @@ ExternalCallInstruction &BytecodeBuilder::InsertBytecodeExternalCallInstruction(
       sizeof(instr_slot_t);
   PL_ASSERT(number_instruction_slots == 2);
 
-  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(), number_instruction_slots,
-                            0);
+  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(),
+                                      number_instruction_slots, 0);
 
   ExternalCallInstruction instruction = {
       Opcode::call_external, call_context,
       reinterpret_cast<void (*)(void)>(function)};
   *reinterpret_cast<ExternalCallInstruction *>(
-      &*(bytecode_function_.bytecode_.end() - number_instruction_slots)) = instruction;
+      &*(bytecode_function_.bytecode_.end() - number_instruction_slots)) =
+      instruction;
 
   AddInstructionToTrace(llvm_instruction, number_instruction_slots);
 
   return reinterpret_cast<ExternalCallInstruction &>(
-      bytecode_function_.bytecode_[bytecode_function_.bytecode_.size() - number_instruction_slots]);
+      bytecode_function_.bytecode_[bytecode_function_.bytecode_.size() -
+                                   number_instruction_slots]);
 }
 
 InternalCallInstruction &BytecodeBuilder::InsertBytecodeInternalCallInstruction(
@@ -216,8 +218,8 @@ InternalCallInstruction &BytecodeBuilder::InsertBytecodeInternalCallInstruction(
       ((2 * (4 + number_arguments)) + sizeof(instr_slot_t) - 1) /
       sizeof(instr_slot_t);
 
-  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(), number_instruction_slots,
-                            0);
+  bytecode_function_.bytecode_.insert(bytecode_function_.bytecode_.end(),
+                                      number_instruction_slots, 0);
   InternalCallInstruction &instruction =
       *reinterpret_cast<InternalCallInstruction *>(
           &*(bytecode_function_.bytecode_.end() - number_instruction_slots));
@@ -226,8 +228,9 @@ InternalCallInstruction &BytecodeBuilder::InsertBytecodeInternalCallInstruction(
   instruction.dest_slot = dest_slot;
   instruction.number_args = static_cast<index_t>(number_arguments);
 
-  PL_ASSERT(&instruction.args[number_arguments - 1] <
-            reinterpret_cast<index_t *>(&bytecode_function_.bytecode_.back() + 1));
+  PL_ASSERT(
+      &instruction.args[number_arguments - 1] <
+      reinterpret_cast<index_t *>(&bytecode_function_.bytecode_.back() + 1));
 
   AddInstructionToTrace(llvm_instruction, number_instruction_slots);
 
@@ -239,9 +242,9 @@ InternalCallInstruction &BytecodeBuilder::InsertBytecodeInternalCallInstruction(
 void BytecodeBuilder::AddInstructionToTrace(
     const llvm::Instruction *llvm_instruction,
     size_t number_instruction_slots) {
-  bytecode_function_.instruction_trace_.insert(bytecode_function_.instruction_trace_.end(),
-                                     number_instruction_slots,
-                                     llvm_instruction);
+  bytecode_function_.instruction_trace_.insert(
+      bytecode_function_.instruction_trace_.end(), number_instruction_slots,
+      llvm_instruction);
 }
 #endif
 
@@ -250,8 +253,7 @@ BytecodeBuilder::value_index_t BytecodeBuilder::GetValueIndex(
   auto result = value_mapping_.find(value);
 
   // If the index already exists, just return it
-  if (result != value_mapping_.end())
-    return result->second;
+  if (result != value_mapping_.end()) return result->second;
 
   // Otherwise create a new index
 
@@ -261,7 +263,8 @@ BytecodeBuilder::value_index_t BytecodeBuilder::GetValueIndex(
 
   value_index_t value_index = value_liveness_.size();
   value_mapping_[value] = value_index;
-  value_liveness_.emplace_back(std::numeric_limits<index_t>::max(), std::numeric_limits<index_t>::max());
+  value_liveness_.emplace_back(std::numeric_limits<index_t>::max(),
+                               std::numeric_limits<index_t>::max());
   return value_index;
 }
 
@@ -273,7 +276,8 @@ BytecodeBuilder::value_index_t BytecodeBuilder::CreateValueAlias(
   return value_index;
 }
 
-value_t BytecodeBuilder::GetConstantValue(const llvm::Constant *constant) const {
+value_t BytecodeBuilder::GetConstantValue(
+    const llvm::Constant *constant) const {
   llvm::Type *type = constant->getType();
 
   if (constant->isNullValue() || constant->isZeroValue()) {
@@ -331,25 +335,25 @@ BytecodeBuilder::value_index_t BytecodeBuilder::GetConstantIndex(
   // We merge all constants that share the same value (not the type!)
 
   // Check if entry with this value already exists
-  auto constant_result =
-      std::find_if(constants_.begin(), constants_.end(),
-                   [value](const std::pair<value_t, value_index_t> &item) {
-                     return item.first == value;
-                   });
+  auto constant_result = std::find(bytecode_function_.constants_.begin(),
+                                   bytecode_function_.constants_.end(), value);
 
-  if (constant_result == constants_.end()) {
+  if (constant_result == bytecode_function_.constants_.end()) {
     // create new constant with that value
     value_index = value_liveness_.size();
     value_mapping_[constant] = value_index;
-    value_liveness_.emplace_back(0, 0); // constant liveness starts at 0
+    value_liveness_.emplace_back(0, 0);  // constant liveness starts at 0
 
-    constants_.emplace_back(std::make_pair(value, value_index));
+    bytecode_function_.constants_.push_back(value);
+    constant_value_indexes_.push_back(value_index);
 
     // constants liveness starts at program start
     value_liveness_[value_index].first = 0;
   } else {
     // value already exists, create alias
-    value_index = constant_result->second;
+    auto constant_index =
+        constant_result - bytecode_function_.constants_.begin();
+    value_index = constant_value_indexes_[constant_index];
     CreateValueAlias(constant, value_index);
   }
 
@@ -368,11 +372,13 @@ index_t BytecodeBuilder::GetValueSlot(const llvm::Value *value) const {
   return value_slots_[result->second];
 }
 
-void BytecodeBuilder::ExtendValueLiveness(const llvm::Value *llvm_value, instruction_index_t instruction_index) {
+void BytecodeBuilder::ExtendValueLiveness(
+    const llvm::Value *llvm_value, instruction_index_t instruction_index) {
   value_index_t value_index = GetValueIndex(llvm_value);
 
   // Special case if no liveness information is available yet
-  if (value_liveness_[value_index].first == std::numeric_limits<index_t>::max()) {
+  if (value_liveness_[value_index].first ==
+      std::numeric_limits<index_t>::max()) {
     value_liveness_[value_index].first = instruction_index;
     value_liveness_[value_index].second = instruction_index;
     return;
@@ -421,7 +427,9 @@ ffi_type *BytecodeBuilder::GetFFIType(llvm::Type *type) const {
       return &ffi_type_uint64;
 
     default:
-      throw NotSupportedException(std::string("can't find a ffi_type for type: ") + CodeGen::Print(type));
+      throw NotSupportedException(
+          std::string("can't find a ffi_type for type: ") +
+          CodeGen::Print(type));
   }
 }
 
@@ -441,7 +449,7 @@ uint64_t BytecodeBuilder::GetConstantIntegerValueUnsigned(
 }
 
 bool BytecodeBuilder::BasicBlockIsRPOSucc(const llvm::BasicBlock *bb,
-                                         const llvm::BasicBlock *succ) const {
+                                          const llvm::BasicBlock *succ) const {
   // walk the vector where we saved the basic block pointers in R
   // reverse post order (RPO)
   for (size_t i = 0; i < bb_reverse_post_order_.size() - 1; i++) {
@@ -494,7 +502,6 @@ void BytecodeBuilder::AnalyseFunction() {
                ->hasAllZeroIndices())
         is_non_zero_gep = true;
 
-
       // PHI-Handling:
       // We do not process the PHI instructions directly, but at the end of a
       // basic block, we process all PHI instructions of the successor blocks,
@@ -512,22 +519,22 @@ void BytecodeBuilder::AnalyseFunction() {
         // For all successor basic blocks
         for (auto succ_iterator = llvm::succ_begin(bb);
              succ_iterator != llvm::succ_end(bb); ++succ_iterator) {
-
           // Iterate phi instructions
-          for (llvm::BasicBlock::const_iterator instr_iterator = succ_iterator->begin();
+          for (llvm::BasicBlock::const_iterator instr_iterator =
+                   succ_iterator->begin();
                auto *phi_instruction =
                    llvm::dyn_cast<llvm::PHINode>(&*instr_iterator);
                ++instr_iterator) {
-
             // extend lifetime of phi value itself
             ExtendValueLiveness(phi_instruction, instruction_index);
 
             // extend lifetime of its operand
-            llvm::Value *phi_operand = phi_instruction->getIncomingValueForBlock(bb);
+            llvm::Value *phi_operand =
+                phi_instruction->getIncomingValueForBlock(bb);
             // Similar to Exception 3, we extend the lifetime by one, to ensure
             // the other phi operations do not overwrite the operand
             ExtendValueLiveness(phi_operand, instruction_index + 1);
-          } // end iterate phi instructions
+          }  // end iterate phi instructions
 
           // We also use iterating the basic block successors to find
           // back edges. If we have seen a successor basic block before, it
@@ -536,13 +543,13 @@ void BytecodeBuilder::AnalyseFunction() {
             auto instruction_index_range =
                 bb_instruction_index_range.find(*succ_iterator);
             if (instruction_index_range != bb_instruction_index_range.end()) {
-              index_t back_edge_instruction_index = instruction_index_range->second.first;
+              index_t back_edge_instruction_index =
+                  instruction_index_range->second.first;
 
               // For all values that are live at that time...
               for (auto &liveness : value_liveness_) {
-                if (liveness.first < back_edge_instruction_index
-                    && liveness.second >= back_edge_instruction_index) {
-
+                if (liveness.first < back_edge_instruction_index &&
+                    liveness.second >= back_edge_instruction_index) {
                   // ...extend lifetime of this value to survive back edge
                   // instruction_index + 1 is the index of the last
                   // instruction in this basic block
@@ -553,7 +560,7 @@ void BytecodeBuilder::AnalyseFunction() {
               found_back_edge = true;
             }
           }
-        } // end iterate successor basic blocks
+        }  // end iterate successor basic blocks
 
         instruction_index++;
 
@@ -653,7 +660,7 @@ void BytecodeBuilder::AnalyseFunction() {
             // value_liveness vector here. The liveness of those
             // instructions has to be extended to the definition of the call
             // instruction, and this way we ensure that the vector is sorted
-            // by .definition and we avoid sorting it later.
+            // by lifetime start index and we avoid sorting it later.
             for (auto *user : call_instruction->users()) {
               auto *extract_instruction =
                   llvm::cast<llvm::ExtractValueInst>(user);
@@ -697,19 +704,27 @@ void BytecodeBuilder::AnalyseFunction() {
 void BytecodeBuilder::PerformNaiveRegisterAllocation() {
   // assign a value slot to every liveness range in value_liveness_
   value_slots_.resize(value_liveness_.size(), 0);
-
-  // It is not worth removing entries from values that are never used,
-  // so we simply skip them when iterating (if .last_usage = unknown)
-  // and they have dummy slot 0 assigned
-
   index_t reg = 0;
+
+  // process constants
+  for (auto &constant_value_index : constant_value_indexes_) {
+    value_slots_[constant_value_index] = reg++ + 1;
+  }
+
+  // process function arguments
+  for (auto &argument : llvm_function_->args()) {
+    value_index_t argument_value_index = GetValueIndex(&argument);
+    value_slots_[argument_value_index] = reg++ + 1;
+  }
 
   // iterate over other entries, which are already sorted
   for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
-    // skip values that are never used
+    // skip values that are never used (get assigned to dummy slot)
     if (value_liveness_[i].first == value_liveness_[i].second) continue;
 
-    value_slots_[i] = reg++ + 1;  // + 1 because 0 is dummy slot
+    // some values (constants, function arguments) are processed already
+    if (value_slots_[i] == 0)
+      value_slots_[i] = reg++ + 1;  // + 1 because 0 is dummy slot
   }
 
   number_value_slots_ = reg + 1;
@@ -719,7 +734,9 @@ void BytecodeBuilder::PerformGreedyRegisterAllocation() {
   // assign a value slot to every liveness range in value_liveness_
 
   value_slots_.resize(value_liveness_.size(), 0);
-  std::vector<ValueLiveness> registers;
+  std::vector<ValueLiveness> registers(constant_value_indexes_.size() +
+                                       llvm_function_->arg_size());
+  index_t reg = 0;
 
   auto findEmptyRegister = [&registers](ValueLiveness liveness) {
     for (index_t i = 0; i < registers.size(); ++i) {
@@ -734,44 +751,48 @@ void BytecodeBuilder::PerformGreedyRegisterAllocation() {
     return static_cast<index_t>(registers.size() - 1);
   };
 
-  // it is not worth removing entries from values that are never used,
-  // so we simply skip them when iterating (if .last_usage = unknown)
-  // and they have dummy slot 0 assigned
-
-  // the vector value_liveness_ is already sorted by .definition
-  // except for the constant values. so we just iterate it and pick out
-  // the entries with .definition = 0 manually
-
-  // get all entries with .definition = 0
-  for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
-    if (value_liveness_[i].first == 0 &&
-        value_liveness_[i].second != 0) {
-      registers.push_back(value_liveness_[i]);
-      value_slots_[i] =
-          registers.size() - 1 + 1;  // + 1 because 0 is dummy slot
-    }
+  // process constants
+  for (auto &constant_value_index : constant_value_indexes_) {
+    registers[reg] = value_liveness_[constant_value_index];
+    value_slots_[constant_value_index] =
+        reg++ + 1;  // + 1 because 0 is dummy slot
   }
 
+  // process function arguments
+  for (auto &argument : llvm_function_->args()) {
+    value_index_t argument_value_index = GetValueIndex(&argument);
+    registers[reg] = value_liveness_[argument_value_index];
+    value_slots_[argument_value_index] =
+        reg++ + 1;  // + 1 because 0 is dummy slot
+  }
+
+  PL_ASSERT(registers.size() == reg);
+
+// The vector value_liveness_ is already sorted by lifetime start index
+// except for the constant values, which are already processed
+
 #ifndef NDEBUG
-  // additional check in debug mode, to ensure that our assertion with the
-  // vector already sorted by .definition (except zero) is currect
+  // additional check in debug mode, to ensure that our assertion that the
+  // vector is already sorted by lifetime start index (except zero) is correct
   instruction_index_t instruction_index = 1;
+
+  for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
+    if (value_liveness_[i].first != 0) {
+      PL_ASSERT(value_liveness_[i].first >= instruction_index);
+      instruction_index = value_liveness_[i].first;
+    }
+  }
 #endif
 
   // iterate over other entries, which are already sorted
   for (value_index_t i = 0; i < value_liveness_.size(); ++i) {
-    // skip values that start at zero or that are never used
-    if (value_liveness_[i].first == 0 ||
-        value_liveness_[i].first == value_liveness_[i].second)
-      continue;
+    // skip values that are never used
+    if (value_liveness_[i].first == value_liveness_[i].second) continue;
 
-#ifndef NDEBUG
-    PL_ASSERT(value_liveness_[i].first >= instruction_index);
-    instruction_index = value_liveness_[i].first;
-#endif
-
-    value_slots_[i] = findEmptyRegister(value_liveness_[i]) +
-                      1;  // + 1 because 0 is dummy slot
+    if (value_slots_[i] == 0) {
+      value_slots_[i] = findEmptyRegister(value_liveness_[i]) +
+                        1;  // + 1 because 0 is dummy slot
+    }
   }
 
   number_value_slots_ = registers.size() + 1;  // + 1 because 0 is dummy slot
@@ -783,11 +804,11 @@ void BytecodeBuilder::DumpValueInformation() {
   // every value index is one column.
 
   std::ofstream output;
-  output.open(std::string("dump") + bytecode_function_.function_name_ + "_value_information.csv");
+  output.open(std::string("dump") + bytecode_function_.function_name_ +
+              "_value_information.csv");
 
   output << "index;instruction;";
   std::string row;
-
 
   for (size_t i = 0; i < value_liveness_.size(); i++) {
     output << i << ";";
@@ -826,8 +847,7 @@ void BytecodeBuilder::DumpValueInformation() {
         instruction_index++;
       }
 
-      output << instruction_index << ";" <<
-                CodeGen::Print(instruction) << ";";
+      output << instruction_index << ";" << CodeGen::Print(instruction) << ";";
 
       // for every value index, print if its live or not
       for (size_t i = 0; i < value_liveness_.size(); i++) {
@@ -1031,26 +1051,17 @@ void BytecodeBuilder::TranslateFunction() {
 
 void BytecodeBuilder::Finalize() {
   // calculate final number of value slots during runtime
-  bytecode_function_.number_values_ = number_value_slots_ + number_temporary_value_slots_;
+  bytecode_function_.number_values_ =
+      number_value_slots_ + number_temporary_value_slots_;
 
   // check if number values exceeds bit range (unrealistic)
-  if (bytecode_function_.number_values_ >= std::numeric_limits<index_t>::max()) {
+  if (bytecode_function_.number_values_ >=
+      std::numeric_limits<index_t>::max()) {
     throw NotSupportedException("number of values exceeds max number of bits");
   }
 
-  // prepare constants
-  bytecode_function_.constants_.resize(constants_.size());
-  for (size_t i = 0; i < constants_.size(); ++i) {
-    bytecode_function_.constants_[i] =
-        std::make_pair(constants_[i].first, GetValueSlot(constants_[i].second));
-  }
-
   // prepare arguments
-  bytecode_function_.function_arguments_.resize(llvm_function_->arg_size());
-  index_t argument_index = 0;
-  for (auto &argument : llvm_function_->args()) {
-    bytecode_function_.function_arguments_[argument_index++] = GetValueSlot(&argument);
-  }
+  bytecode_function_.number_function_arguments_ = llvm_function_->arg_size();
 }
 
 void BytecodeBuilder::ProcessPHIsForBasicBlock(const llvm::BasicBlock *bb) {
@@ -1337,8 +1348,11 @@ void BytecodeBuilder::TranslateGetElementPtr(
   // The offset is an immediate constant, not a slot index
   // instruction is created here, but offset will be filled in later,
   // because we may merge it with constant array accesses
-  auto &gep_offset_bytecode_instruction_ref = InsertBytecodeInstruction(gep_instruction, Opcode::gep_offset, GetValueSlot(gep_instruction), GetValueSlot(gep_instruction->getPointerOperand()), 0);
-  size_t gep_offset_bytecode_instruction_index = bytecode_function_.GetIndexFromIP(&gep_offset_bytecode_instruction_ref);
+  auto &gep_offset_bytecode_instruction_ref = InsertBytecodeInstruction(
+      gep_instruction, Opcode::gep_offset, GetValueSlot(gep_instruction),
+      GetValueSlot(gep_instruction->getPointerOperand()), 0);
+  size_t gep_offset_bytecode_instruction_index =
+      bytecode_function_.GetIndexFromIP(&gep_offset_bytecode_instruction_ref);
 
   // First index operand of the instruction is the array index for the
   // source type
@@ -1416,8 +1430,9 @@ void BytecodeBuilder::TranslateGetElementPtr(
   // fill in calculated overall offset in previously placed gep_offset
   // bytecode instruction
   // (use index instead of reference, as vector may has been relocated!)
-  reinterpret_cast<Instruction *>(&bytecode_function_.bytecode_[gep_offset_bytecode_instruction_index])->args[2] =
-      static_cast<index_t>(overall_offset);
+  reinterpret_cast<Instruction *>(
+      &bytecode_function_.bytecode_[gep_offset_bytecode_instruction_index])
+      ->args[2] = static_cast<index_t>(overall_offset);
 }
 
 void BytecodeBuilder::TranslateFloatIntCast(
@@ -1763,7 +1778,8 @@ void BytecodeBuilder::TranslateCall(const llvm::Instruction *instruction) {
       // insert bytecode instruction referring to this call context
       InsertBytecodeExternalCallInstruction(
           call_instruction,
-          static_cast<index_t>(bytecode_function_.external_call_contexts_.size() - 1),
+          static_cast<index_t>(
+              bytecode_function_.external_call_contexts_.size() - 1),
           raw_pointer);
     }
   } else {

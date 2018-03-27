@@ -13,10 +13,10 @@
 #include "codegen/interpreter/bytecode_function.h"
 #include "codegen/codegen.h"
 
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <string>
-#include <fstream>
 
 namespace peloton {
 namespace codegen {
@@ -102,10 +102,10 @@ void BytecodeFunction::DumpContents() const {
 
   // Print Constants
   if (constants_.size() > 0) output << "Constants:" << std::endl;
-  for (auto &constant : constants_) {
-    output << "[" << std::setw(3) << std::dec << constant.second
-           << "] = " << *reinterpret_cast<const int64_t *>(&constant.first)
-           << " 0x" << std::hex << constant.first << std::endl;
+  for (size_t i = 0; i < constants_.size(); i++) {
+    output << "[" << std::setw(3) << std::dec << i
+           << "] = " << *reinterpret_cast<const int64_t *>(&constants_[i])
+           << " 0x" << std::hex << constants_[i] << std::endl;
   }
 
   output << std::endl;

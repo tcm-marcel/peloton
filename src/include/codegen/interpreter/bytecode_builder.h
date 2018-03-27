@@ -73,7 +73,7 @@ class BytecodeBuilder {
 
  private:
   BytecodeBuilder(const CodeContext &code_context,
-                 const llvm::Function *function);
+                  const llvm::Function *function);
 
   /**
    * Analyses the function to collect values and constants and gets
@@ -157,7 +157,8 @@ class BytecodeBuilder {
   index_t GetValueSlot(const llvm::Value *value) const;
 
   // TODO
-  void ExtendValueLiveness(const llvm::Value *llvm_value, instruction_index_t instruction_index);
+  void ExtendValueLiveness(const llvm::Value *llvm_value,
+                           instruction_index_t instruction_index);
 
   /**
    * Returns the index for a additional temporary value slot in that
@@ -264,7 +265,6 @@ class BytecodeBuilder {
    */
   Opcode GetOpcodeForTypeSizeIntTypes(Opcode untyped_op,
                                       llvm::Type *type) const;
-
 
   //===--------------------------------------------------------------------===//
   // Methods for creating Bytecode Instructions
@@ -411,9 +411,10 @@ class BytecodeBuilder {
   size_t number_value_slots_;
 
   /**
-   * Holds all constants, their actual values and their value index
+   * Holds the value_index of the constants in bytecode_function_.constants_,
+   * accessed with the same index.
    */
-  std::vector<std::pair<value_t, value_index_t>> constants_;
+  std::vector<value_index_t> constant_value_indexes_;
 
   /**
    * Additional temporary value slots (created due to phi swap problem).
