@@ -31,15 +31,19 @@ BytecodeBuilder::BytecodeBuilder(const CodeContext &code_context,
       llvm_function_(function) {}
 
 BytecodeFunction BytecodeBuilder::CreateBytecodeFunction(
-    const CodeContext &code_context, const llvm::Function *function) {
+    const CodeContext &code_context, const llvm::Function *function,
+    bool use_naive_register_allocator) {
   BytecodeBuilder builder(code_context, function);
 
   // DEBUG
   // code_context.DumpContents();
 
   builder.AnalyseFunction();
-  builder.PerformNaiveRegisterAllocation();
-  // builder.PerformGreedyRegisterAllocation();
+
+  if (use_naive_register_allocator)
+    builder.PerformNaiveRegisterAllocation();
+  else
+    builder.PerformGreedyRegisterAllocation();
 
   // DEBUG
   // builder.DumpValueInformation();

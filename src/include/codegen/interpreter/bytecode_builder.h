@@ -43,7 +43,8 @@ class BytecodeBuilder {
    * BytecodeInterpreter (several times).
    */
   static BytecodeFunction CreateBytecodeFunction(
-      const CodeContext &code_context, const llvm::Function *function);
+      const CodeContext &code_context, const llvm::Function *function,
+      bool use_naive_register_allocator = false);
 
  private:
   // These types definitions have the purpose to make the code better
