@@ -74,7 +74,7 @@ size_t BytecodeFunction::GetInstructionSlotSize(
 
 void BytecodeFunction::DumpContents() const {
   std::ofstream output;
-  output.open(std::string("dump") + function_name_ + ".bf");
+  output.open(function_name_ + ".bf");
 
 #ifndef NDEBUG
   const llvm::BasicBlock *bb;
