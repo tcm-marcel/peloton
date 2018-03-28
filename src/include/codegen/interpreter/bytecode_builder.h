@@ -95,12 +95,6 @@ class BytecodeBuilder {
   void PerformGreedyRegisterAllocation();
 
   /**
-   * Dump the collected liveness information in csv format for debugging
-   * @return string with csv formatted values
-   */
-  void DumpValueInformation();
-
-  /**
    * Translates all instructions into bytecode.
    */
   void TranslateFunction();
@@ -133,10 +127,11 @@ class BytecodeBuilder {
   value_index_t CreateValueAlias(const llvm::Value *alias,
                                  value_index_t value_index);
 
-  // TODO
   /**
-   * Adds a LLVM constant to this bytecode function. This function is meant
-   * to be called once per LLVM Constant.
+   * Returns the value_index for a LLVM constant.
+   * In LLVM several Constant Objects with the same value can exist. This
+   * function tries to find an existing constant with the same value or creates
+   * a new one if necessary.
    * @param constant LLVM constant
    * @return a value index that refers to a constant with the same value. If
    * no internal constant with this value exists before, a new value index
@@ -145,19 +140,22 @@ class BytecodeBuilder {
   value_index_t GetConstantIndex(const llvm::Constant *constant);
 
   /**
-   * Returns the value slot (register) for a given value index
-   * @param value_index value index
+   * Returns the value slot (register) for a given LLVM value
+   * @param value LLVM value
    * @return the value slot (register) assigned by the register allocation
-   */
-  index_t GetValueSlot(value_index_t value_index) const;
-
-  /**
-   * Wrapper for GetValueSlot(value_index) that also does the index lookup.
-   * Index must already exist when using this function!
+   * This function must not be called before the Analysis pass and the
+   * Register Allocation!
    */
   index_t GetValueSlot(const llvm::Value *value) const;
 
-  // TODO
+  /**
+   * Extends the liveness range of a value to cover the given instruction index.
+   * The will be extended to the "left" or the "right" if necessary, or not at
+   * all, if it already covers this index.
+   * This function calls GetValueIndex, which may create a new value index.
+   * @param llvm_value LLVM value for which the liveness should be extended
+   * @param instruction_index position in the
+   */
   void ExtendValueLiveness(const llvm::Value *llvm_value,
                            instruction_index_t instruction_index);
 
@@ -338,7 +336,7 @@ class BytecodeBuilder {
 
 /**
  * Helper function, that adds the given instruction to the instruction trace.
- * (Should only be called from InsertBytecode isntructions)
+ * (Should only be called from InsertBytecode instructions)
  * In Release mode this function compiles to a stub.
  * @param llvm_instruction LLVM instruction the just created bytecode
  * instruction originates from

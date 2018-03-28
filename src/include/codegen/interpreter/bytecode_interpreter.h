@@ -52,7 +52,8 @@ class BytecodeInterpreter {
    * expect one argument.
    * @param arguments Char pointer argument of the function.
    */
-  static void ExecuteFunction(const BytecodeFunction &bytecode_function, char *param);
+  static void ExecuteFunction(const BytecodeFunction &bytecode_function,
+                              char *param);
 
  private:
   explicit BytecodeInterpreter(const BytecodeFunction &bytecode_function);
@@ -172,8 +173,9 @@ class BytecodeInterpreter {
   template <typename type_t>
   void DumpValue(const index_t index) {
     std::ostringstream output;
-    output << "  [" << std::dec << std::setw(3) << index << "] <= " << GetValue<type_t>(index)
-           << "/0x" << std::hex << GetValue<type_t>(index);
+    output << "  [" << std::dec << std::setw(3) << index
+           << "] <= " << GetValue<type_t>(index) << "/0x" << std::hex
+           << GetValue<type_t>(index);
     LOG_TRACE("%s", output.str().c_str());
   }
 #else
@@ -728,8 +730,8 @@ class BytecodeInterpreter {
 
   ALWAYS_INLINE inline const Instruction *gep_offsetHandler(
       const Instruction *instruction) {
-    uintptr_t sum =
-        GetValue<uintptr_t>(instruction->args[1]) + static_cast<uintptr_t>(instruction->args[2]);
+    uintptr_t sum = GetValue<uintptr_t>(instruction->args[1]) +
+                    static_cast<uintptr_t>(instruction->args[2]);
     SetValue<uintptr_t>(instruction->args[0], (sum));
     return AdvanceIP<1>(instruction);
   }
@@ -800,11 +802,13 @@ class BytecodeInterpreter {
     }
 
     value_t result = ExecuteFunction(
-        bytecode_function_.sub_functions_[call_instruction->sub_function], arguments);
+        bytecode_function_.sub_functions_[call_instruction->sub_function],
+        arguments);
     SetValue(call_instruction->dest_slot, result);
 
-    return AdvanceIP(instruction, bytecode_function_.GetInteralCallInstructionSlotSize(
-                                      call_instruction));
+    return AdvanceIP(
+        instruction,
+        bytecode_function_.GetInteralCallInstructionSlotSize(call_instruction));
   }
 
   ALWAYS_INLINE inline const Instruction *nop_movHandler(
@@ -1014,6 +1018,3 @@ class BytecodeInterpreter {
 }  // namespace interpreter
 }  // namespace codegen
 }  // namespace peloton
-
-// DEBUG
-#undef LOG_TRACE_ENABLED

@@ -103,7 +103,7 @@ void BytecodeFunction::DumpContents() const {
   // Print Constants
   if (constants_.size() > 0) output << "Constants:" << std::endl;
   for (size_t i = 0; i < constants_.size(); i++) {
-    output << "[" << std::setw(3) << std::dec << i
+    output << "[" << std::setw(3) << std::dec << (i + 1)
            << "] = " << *reinterpret_cast<const int64_t *>(&constants_[i])
            << " 0x" << std::hex << constants_[i] << std::endl;
   }

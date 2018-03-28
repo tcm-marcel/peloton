@@ -34,10 +34,6 @@ BytecodeFunction BytecodeBuilder::CreateBytecodeFunction(
     const CodeContext &code_context, const llvm::Function *function,
     bool use_naive_register_allocator) {
   BytecodeBuilder builder(code_context, function);
-
-  // DEBUG
-  // code_context.DumpContents();
-
   builder.AnalyseFunction();
 
   if (use_naive_register_allocator)
@@ -45,14 +41,8 @@ BytecodeFunction BytecodeBuilder::CreateBytecodeFunction(
   else
     builder.PerformGreedyRegisterAllocation();
 
-  // DEBUG
-  // builder.DumpValueInformation();
-
   builder.TranslateFunction();
   builder.Finalize();
-
-  // DEBUG
-  // builder.bytecode_function_.DumpContents();
 
   return std::move(builder.bytecode_function_);
 }
@@ -363,11 +353,6 @@ BytecodeBuilder::value_index_t BytecodeBuilder::GetConstantIndex(
 
   return value_index;
 };
-
-index_t BytecodeBuilder::GetValueSlot(value_index_t value_index) const {
-  PL_ASSERT(value_index < value_slots_.size());
-  return value_slots_[value_index];
-}
 
 index_t BytecodeBuilder::GetValueSlot(const llvm::Value *value) const {
   auto result = value_mapping_.find(value);
@@ -800,113 +785,6 @@ void BytecodeBuilder::PerformGreedyRegisterAllocation() {
   }
 
   number_value_slots_ = registers.size() + 1;  // + 1 because 0 is dummy slot
-}
-
-void BytecodeBuilder::DumpValueInformation() {
-  // This function dumps the value liveness and the register allocation
-  // in csv format for debugging purposes: every instruction_index is one row,
-  // every value index is one column.
-
-  std::ofstream output;
-  output.open(std::string("dump") + bytecode_function_.function_name_ +
-              "_value_information.csv");
-
-  output << "index;instruction;";
-  std::string row;
-
-  for (size_t i = 0; i < value_liveness_.size(); i++) {
-    output << i << ";";
-    row += "-;";
-  }
-  output << "\n";
-
-  // dump for every instruction index
-  instruction_index_t instruction_index = 0;
-  for (llvm::ReversePostOrderTraversal<const llvm::Function *>::rpo_iterator
-           traversal_iterator = rpo_traversal_.begin();
-       traversal_iterator != rpo_traversal_.end(); ++traversal_iterator) {
-    const llvm::BasicBlock *bb = *traversal_iterator;
-
-    output << ";" << bb->getName().str() << ":;" << row << "\n";
-
-    for (llvm::BasicBlock::const_iterator instr_iterator = bb->begin();
-         instr_iterator != bb->end(); ++instr_iterator, ++instruction_index) {
-      const llvm::Instruction *instruction = instr_iterator;
-
-      // DEBUG
-      // if next instruction is terminator instruction, process phi's first
-      if (llvm::isa<llvm::TerminatorInst>(instruction)) {
-        output << instruction_index << ";phi-moves;";
-
-        // for every value index, print if its live or not
-        for (size_t i = 0; i < value_liveness_.size(); i++) {
-          if (instruction_index >= value_liveness_[i].first &&
-              instruction_index <= value_liveness_[i].second)
-            output << "L;";
-          else
-            output << ";";
-        }
-        output << "\n";
-
-        instruction_index++;
-      }
-
-      output << instruction_index << ";" << CodeGen::Print(instruction) << ";";
-
-      // for every value index, print if its live or not
-      for (size_t i = 0; i < value_liveness_.size(); i++) {
-        if (instruction_index >= value_liveness_[i].first &&
-            instruction_index <= value_liveness_[i].second)
-          output << "L;";
-        else
-          output << ";";
-      }
-      output << "\n";
-    }
-  }
-
-  // add additional information for the values under each column
-  // 1. print value index
-  output << ";value index:;";
-  for (size_t i = 0; i < value_liveness_.size(); i++) {
-    output << i << ";";
-  }
-  output << "\n";
-
-  // 2. print value slot
-  output << ";value slot:;";
-  for (size_t i = 0; i < value_liveness_.size(); i++) {
-    output << value_slots_[i] << ";";
-  }
-  output << "\n";
-
-  // 3. print value definition
-  output << ";definition:;";
-  for (size_t i = 0; i < value_liveness_.size(); i++) {
-    output << value_liveness_[i].first << ";";
-  }
-  output << "\n";
-
-  // 4. print value last usage
-  output << ";last usage:;";
-  for (size_t i = 0; i < value_liveness_.size(); i++) {
-    output << value_liveness_[i].second << ";";
-  }
-  output << "\n";
-
-  // 5. print mapped LLVM values
-  output << ";mapped LLVM  values:;";
-  for (size_t i = 0; i < value_liveness_.size(); i++) {
-    for (auto &mapping : value_mapping_) {
-      if (mapping.second == i) {
-        output << CodeGen::Print(mapping.first) << ", ";
-      }
-    }
-    output << ";";
-  }
-  output << "\n";
-
-  output.close();
 }
 
 void BytecodeBuilder::TranslateFunction() {
