@@ -15,7 +15,6 @@
 #include "codegen/proxy/executor_context_proxy.h"
 #include "codegen/proxy/query_parameters_proxy.h"
 #include "codegen/proxy/storage_manager_proxy.h"
-#include "codegen/proxy/storage_manager_proxy.h"
 #include "common/logger.h"
 #include "common/timer.h"
 
