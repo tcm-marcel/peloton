@@ -84,7 +84,7 @@ class Query {
   void Prepare(const LLVMFunctions &funcs);
 
   // Compiles the function in this query to native code
-  bool Compile(CompileStats *stats = nullptr);
+  void Compile(CompileStats *stats = nullptr);
 
   /**
    * @brief Executes the compiled query.

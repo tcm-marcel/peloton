@@ -86,13 +86,13 @@ class CodeContext {
   void SetUDF(llvm::Function *func_ptr) { udf_func_ptr_ = func_ptr; }
 
   /// Verify all the code contained in this context
-  bool Verify();
+  void Verify();
 
   /// Optimize all the code contained in this context
-  bool Optimize();
+  void Optimize();
 
   /// Compile all the code contained in this context
-  bool Compile();
+  void Compile();
 
   /// Retrieve the raw function pointer to the provided compiled LLVM function
   FuncPtr GetRawFunctionPointer(llvm::Function *fn) const {

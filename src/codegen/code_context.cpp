@@ -190,23 +190,23 @@ void CodeContext::RegisterBuiltin(llvm::Function *func_decl,
 }
 
 /// Verify all the functions that were created in this context
-bool CodeContext::Verify() {
+void CodeContext::Verify() {
   // Verify the module is okay
   llvm::raw_ostream &errors = llvm::errs();
   if (llvm::verifyModule(*module_, &errors)) {
-    // There is an error in the module that failed compilation.
+    // There is an error in the module.
     // Dump the crappy IR to the log ...
     LOG_ERROR("ERROR IN MODULE:\n%s\n", GetIR().c_str());
-    return false;
+
+    throw Exception("The generated LLVM code contains errors. ");
   }
 
   // All is well
   is_verified_ = true;
-  return true;
 }
 
 /// Optimize all the functions that were created in this context
-bool CodeContext::Optimize() {
+void CodeContext::Optimize() {
   // make sure the code is verified
   if (!is_verified_) Verify();
 
@@ -216,13 +216,10 @@ bool CodeContext::Optimize() {
     pass_manager_->run(*func_iter.first);
   }
   pass_manager_->doFinalization();
-
-  // All is well
-  return true;
 }
 
 /// JIT compile all the functions that were created in this context
-bool CodeContext::Compile() {
+void CodeContext::Compile() {
   // make sure the code is verified
   if (!is_verified_) Verify();
 
@@ -236,9 +233,6 @@ bool CodeContext::Compile() {
 
   // Log the module
   LOG_TRACE("%s\n", GetIR().c_str());
-
-  // All is well
-  return true;
 }
 
 size_t CodeContext::GetTypeSize(llvm::Type *type) const {

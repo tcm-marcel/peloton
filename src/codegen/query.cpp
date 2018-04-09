@@ -91,7 +91,7 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
   is_compiled_ = false;
 }
 
-bool Query::Compile(CompileStats *stats) {
+void Query::Compile(CompileStats *stats) {
   // Timer
   Timer<std::ratio<1, 1000>> timer;
   if (stats != nullptr) {
@@ -100,12 +100,7 @@ bool Query::Compile(CompileStats *stats) {
 
   // Compile all functions in context
   LOG_TRACE("Starting Query compilation ...");
-
-  // TODO(marcel): for now Compile() will always return true, find a way to
-  // catch compilation errors from LLVM
-  if (!code_context_.Compile()) {
-    return false;
-  }
+  code_context_.Compile();
 
   // Get pointers to the JITed functions
   compiled_functions_.init_func =
@@ -133,8 +128,6 @@ bool Query::Compile(CompileStats *stats) {
     stats->compile_ms = timer.GetDuration();
     timer.Reset();
   }
-
-  return true;
 }
 
 bool Query::ExecuteNative(FunctionArguments *function_arguments,
