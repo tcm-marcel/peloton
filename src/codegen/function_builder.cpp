@@ -135,7 +135,7 @@ FunctionBuilder::FunctionBuilder(
 // When we destructing the FunctionBuilder, we just do a sanity check to ensure
 // that the user actually finished constructing the function. This is because we
 // do cleanup in Finish().
-FunctionBuilder::~FunctionBuilder() { PELOTON_ASSERT(finished_); }
+FunctionBuilder::~FunctionBuilder() { /* PELOTON_ASSERT(finished_); */ }
 
 // Here, we just need to iterate over the arguments in the function to find a
 // match. The names of the arguments were provided and set at construction time.

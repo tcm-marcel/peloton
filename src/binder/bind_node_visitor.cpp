@@ -244,7 +244,13 @@ void BindNodeVisitor::Visit(expression::TupleValueExpression *expr) {
 void BindNodeVisitor::Visit(expression::CaseExpression *expr) {
   for (size_t i = 0; i < expr->GetWhenClauseSize(); ++i) {
     expr->GetWhenClauseCond(i)->Accept(this);
+    expr->GetWhenClauseResult(i)->Accept(this);
   }
+
+  if (expr->GetDefault() != nullptr)
+    expr->GetDefault()->Accept(this);
+
+  expr->DeduceExpressionType();
 }
 
 void BindNodeVisitor::Visit(expression::SubqueryExpression *expr) {
