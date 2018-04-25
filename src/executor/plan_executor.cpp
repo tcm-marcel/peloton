@@ -23,6 +23,8 @@
 #include "settings/settings_manager.h"
 #include "storage/tuple_iterator.h"
 
+#include "common/benchmark.h"
+
 namespace peloton {
 namespace executor {
 
@@ -53,20 +55,30 @@ static void CompileAndExecutePlan(
   executor::ExecutorContext executor_context{
       txn, codegen::QueryParameters(*plan, params)};
 
-  // Check if we have a cached compiled plan already
-  codegen::Query *query = codegen::QueryCache::Instance().Find(plan);
-  if (query == nullptr) {
+  // Compile the query
+
+//  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
+//    query = codegen::QueryCache::Instance().Find(plan);
+//    if (query == nullptr) {
+//      codegen::QueryCompiler compiler;
+//      auto compiled_query = compiler.Compile(
+//          *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
+//      compiled_query->Compile();
+//
+//      query = compiled_query.get();
+//      codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
+//    }
+//  } else {
+
+    Benchmark::Start(1, "llvm codegen");
+
     codegen::QueryCompiler compiler;
     auto compiled_query = compiler.Compile(
         *plan, executor_context.GetParams().GetQueryParametersMap(), consumer);
-    compiled_query->Compile();
-
-    // Grab an instance to the plan
+    //compiled_query->Compile();
     query = compiled_query.get();
-
-    // Insert the compiled plan into the cache
-    codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
-  }
+    //codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
+//  }
 
   // Execute the query!
   query->Execute(executor_context, consumer);
@@ -161,18 +173,22 @@ void PlanExecutor::ExecutePlan(
   bool codegen_enabled =
       settings::SettingsManager::GetBool(settings::SettingId::codegen);
 
-  try {
-    if (codegen_enabled && codegen::QueryCompiler::IsSupported(*plan)) {
-      CompileAndExecutePlan(plan, txn, params, on_complete);
-    } else {
-      InterpretPlan(plan, txn, params, result_format, on_complete);
-    }
+  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::PlanInterpreter)
+    InterpretPlan(plan, txn, params, result_format, on_complete);
+  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
+
+    try {
+      if (codegen_enabled && codegen::QueryCompiler::IsSupported(*plan)) {
+        CompileAndExecutePlan(plan, txn, params, on_complete);
+      } else {
+        InterpretPlan(plan, txn, params, result_format, on_complete);
+      }
   } catch (Exception &e) {
     ExecutionResult result;
     result.m_result = ResultType::FAILURE;
-    result.m_error_message =
-        StringUtil::Format("ERROR:  during execution ['%s']", e.what());
-    LOG_ERROR("Error during execution: %s", e.what());
+    result.m_error_message = e.what();
+    LOG_ERROR("Error thrown during execution: %s",
+              result.m_error_message.c_str());
     on_complete(result, {});
   }
 }

@@ -100,7 +100,12 @@ class OperatorExpression : public AbstractExpression {
     }
     auto type =
         std::max(children_[0]->GetValueType(), children_[1]->GetValueType());
-    PELOTON_ASSERT(type <= type::TypeId::DECIMAL);
+
+    // Throw an exception if types don't match
+    if (type > type::TypeId::DECIMAL) {
+      throw Exception("Types in operator expression do not match. ");
+    }
+
     return_value_type_ = type;
   }
 

@@ -33,6 +33,8 @@
 namespace peloton {
 namespace executor {
 
+#define TXN 0
+
 /**
  * @brief Constructor for seqscan executor.
  * @param node Seqscan node corresponding to this executor.
@@ -143,18 +145,22 @@ bool SeqScanExecutor::DExecute() {
       // of the same index.
       index_done_ = true;
     }
-    
+
+#if TXN
     concurrency::TransactionManager &transaction_manager =
         concurrency::TransactionManagerFactory::GetInstance();
 
     bool acquire_owner = GetPlanNode<planner::AbstractScan>().IsForUpdate();
     auto current_txn = executor_context_->GetTransaction();
+#endif
 
     // Retrieve next tile group.
     while (current_tile_group_offset_ < table_tile_group_count_) {
       auto tile_group =
           target_table_->GetTileGroup(current_tile_group_offset_++);
+#if TXN
       auto tile_group_header = tile_group->GetHeader();
+#endif
 
       oid_t active_tuple_count = tile_group->GetNextTupleSlot();
 
@@ -162,13 +168,16 @@ bool SeqScanExecutor::DExecute() {
       // and applying the predicate.
       std::vector<oid_t> position_list;
       for (oid_t tuple_id = 0; tuple_id < active_tuple_count; tuple_id++) {
+#if TXN
         ItemPointer location(tile_group->GetTileGroupId(), tuple_id);
 
         auto visibility = transaction_manager.IsVisible(
             current_txn, tile_group_header, tuple_id);
-
+#endif
         // check transaction visibility
+#if TXN
         if (visibility == VisibilityType::OK) {
+#endif
           // if the tuple is visible, then perform predicate evaluation.
           if (predicate_ == nullptr) {
             position_list.push_back(tuple_id);
@@ -181,6 +190,7 @@ bool SeqScanExecutor::DExecute() {
                                                        ResultType::FAILURE);
               return res;
             }
+#endif
           } else {
             ContainerTuple<storage::TileGroup> tuple(tile_group.get(),
                                                      tuple_id);
@@ -201,9 +211,12 @@ bool SeqScanExecutor::DExecute() {
               } else {
                 LOG_TRACE("Sequential Scan Predicate Satisfied");
               }
+#endif
             }
           }
+#if TXN
         }
+#endif
       }
 
       // Don't return empty tiles

@@ -70,13 +70,13 @@ class TrafficCop {
       const std::vector<type::Value> &params, const bool unnamed,
       std::shared_ptr<stats::QueryMetric::QueryParams> param_stats,
       const std::vector<int> &result_format, std::vector<ResultValue> &result,
-      size_t thread_id = 0);
+      size_t thread_id = 0, IsolationLevelType isolation_level = IsolationLevelType::SERIALIZABLE);
 
   // Helper to handle txn-specifics for the plan-tree of a statement.
   executor::ExecutionResult ExecuteHelper(
       std::shared_ptr<planner::AbstractPlan> plan,
       const std::vector<type::Value> &params, std::vector<ResultValue> &result,
-      const std::vector<int> &result_format, size_t thread_id = 0);
+      const std::vector<int> &result_format, size_t thread_id = 0, IsolationLevelType isolation_level = IsolationLevelType::SERIALIZABLE);
 
   // Prepare a statement using the parse tree
   std::shared_ptr<Statement> PrepareStatement(

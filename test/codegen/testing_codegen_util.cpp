@@ -27,6 +27,8 @@
 #include "expression/tuple_value_expression.h"
 #include "storage/table_factory.h"
 
+#include "common/benchmark.h"
+
 namespace peloton {
 namespace test {
 
@@ -284,19 +286,22 @@ PelotonCodeGenTest::CodeGenStats PelotonCodeGenTest::CompileAndExecute(
   auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
   auto *txn = txn_manager.BeginTransaction();
 
+  Benchmark::Start(1, "codegen");
+
   // Compile the query.
   CodeGenStats stats;
   auto query = codegen::QueryCompiler().Compile(
       plan, parameters.GetQueryParametersMap(), consumer, &stats.compile_stats);
 
-  // Executor context
-  executor::ExecutorContext exec_ctx{txn, std::move(parameters)};
+  Benchmark::Stop(1, "codegen");
 
-  // Compile Query to native code
-  query->Compile();
-
-  // Execute the quer
-  query->Execute(exec_ctx, consumer, &stats.runtime_stats);
+  // Execute the query.
+  compiled_query->Compile();
+  stats.runtime_stats = ExecuteSync(
+      *compiled_query,
+      std::unique_ptr<executor::ExecutorContext>(
+          new executor::ExecutorContext(txn, std::move(parameters))),
+      consumer);
 
   // Commit the transaction.
   txn_manager.CommitTransaction(txn);

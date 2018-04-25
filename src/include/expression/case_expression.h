@@ -153,6 +153,23 @@ class CaseExpression : public AbstractExpression {
     }
   };
 
+  void DeduceExpressionType() override {
+    // if we are a decimal or int we should take the highest type id of both
+    // children
+    // This relies on a particular order in types.h
+    auto type = default_expr_->GetValueType();
+
+    for (auto &clause : clauses_)
+      type = std::max(type, clause.second->GetValueType());
+
+    // Throw an exception if types don't match
+    if (type > type::TypeId::DECIMAL) {
+      throw Exception("Types in case expression do not match. ");
+    }
+
+    return_value_type_ = type;
+  }
+
   const std::string GetInfo(int num_indent) const override;
 
   const std::string GetInfo() const override;

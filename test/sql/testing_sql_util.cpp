@@ -61,8 +61,16 @@ ResultType TestingSQLUtil::ExecuteSQLQuery(
   LOG_TRACE("Query: %s", query.c_str());
   // prepareStatement
   std::string unnamed_statement = "unnamed";
+
+
+  Benchmark::Start(1, "parser");
+
   auto &peloton_parser = parser::PostgresParser::GetInstance();
   auto sql_stmt_list = peloton_parser.BuildParseTree(query);
+
+  Benchmark::Stop(1, "parser");
+
+
   PELOTON_ASSERT(sql_stmt_list);
   if (!sql_stmt_list->is_valid) {
     return ResultType::FAILURE;

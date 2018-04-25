@@ -21,6 +21,8 @@
 #include "storage/storage_manager.h"
 #include "settings/settings_manager.h"
 
+#include "common/benchmark.h"
+
 namespace peloton {
 namespace codegen {
 
@@ -47,18 +49,21 @@ void Query::Execute(executor::ExecutorContext &executor_context,
   func_args->executor_context = &executor_context;
   func_args->consumer_arg = consumer.GetConsumerState();
 
-  bool force_interpreter = settings::SettingsManager::GetBool(
-      settings::SettingId::codegen_interpreter);
-
-  if (is_compiled_ && !force_interpreter) {
+  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterNotOptimized || Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterOptimized)
+    ExecuteInterpreter(func_args, stats);
+  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative) {
+    Compile();
+    ExecuteNative(func_args, stats);
+  } else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
     ExecuteNative(func_args, stats);
   } else {
-    try {
-      ExecuteInterpreter(func_args, stats);
-    } catch (interpreter::NotSupportedException e) {
-      LOG_ERROR("query not supported by interpreter: %s", e.what());
-    }
+    PELOTON_ASSERT(false);
   }
+
+  executor::ExecutionResult result;
+  result.m_result = ResultType::SUCCESS;
+  result.m_processed = executor_context->num_processed;
+  on_complete(result);
 }
 
 void Query::Prepare(const LLVMFunctions &query_funcs) {
@@ -67,13 +72,21 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
   // verify the functions
   // will also be done by Optimize() or Compile() if not done before,
   // but we do not want to mix up the timings, so do it here
+
+  Benchmark::Start(1, "llvm verify");
   code_context_.Verify();
+  Benchmark::Stop(1, "llvm verify");
 
   // optimize the functions
   // TODO(marcel): add switch to enable/disable optimization
   // TODO(marcel): add timer to measure time used for optimization (see
   // RuntimeStats)
-  code_context_.Optimize();
+  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterOptimized ||
+      Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative) {
+    Benchmark::Start(1, "llvm optimize");
+    code_context_.Optimize();
+    Benchmark::Stop(1, "llvm optimize");
+  }
 
   is_compiled_ = false;
 }
@@ -85,9 +98,13 @@ void Query::Compile(CompileStats *stats) {
     timer.Start();
   }
 
+  Benchmark::Start(1, "llvm compile");
+
   // Compile all functions in context
   LOG_TRACE("Starting Query compilation ...");
   code_context_.Compile();
+
+  Benchmark::Stop(1, "llvm compile");
 
   // Get pointers to the JITed functions
   compiled_functions_.init_func =
@@ -125,6 +142,11 @@ void Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  if (!is_compiled_)
+    Compile();
+
+  Benchmark::Start(1, "native execute init");
+
   // Call init
   LOG_TRACE("Calling query's init() ...");
   try {
@@ -143,6 +165,9 @@ void Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  Benchmark::Stop(1, "native execute init");
+  Benchmark::Start(1, "native execute plan");
+
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
@@ -160,6 +185,9 @@ void Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Reset();
     timer.Start();
   }
+
+  Benchmark::Stop(1, "native execute plan");
+  Benchmark::Start(1, "native execute teardown");
 
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
@@ -182,16 +210,32 @@ void Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  std::string name_opt = (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterOptimized) ? "opt " : "";
+
+  Benchmark::Start(1, "interpreter translate " + name_opt + "init");
+
   // Create Bytecode
   interpreter::BytecodeFunction init_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, llvm_functions_.init_func);
+
+  Benchmark::Stop(1, "interpreter translate " + name_opt + "init");
+  Benchmark::Start(1, "interpreter translate " + name_opt + "plan");
+
+  Benchmark::Activate(2);
   interpreter::BytecodeFunction plan_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, llvm_functions_.plan_func);
+  Benchmark::Deactivate(2);
+
+  Benchmark::Stop(1, "interpreter translate " + name_opt + "plan");
+  Benchmark::Start(1, "interpreter translate " + name_opt + "teardown");
+
   interpreter::BytecodeFunction tear_down_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, llvm_functions_.tear_down_func);
+
+  Benchmark::Stop(1, "interpreter translate " + name_opt + "teardown");
 
   // Time initialization
   if (stats != nullptr) {
@@ -200,6 +244,8 @@ void Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Reset();
     timer.Start();
   }
+
+  Benchmark::Start(1, "interpreter execute " + name_opt + "init");
 
   // Call init
   LOG_TRACE("Calling query's init() ...");
@@ -219,11 +265,16 @@ void Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  Benchmark::Stop(1, "interpreter execute " + name_opt + "init");
+  Benchmark::Start(1, "interpreter execute " + name_opt + "plan");
+
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
+    Benchmark::Activate(2);
     interpreter::BytecodeInterpreter::ExecuteFunction(
         plan_bytecode, reinterpret_cast<char *>(function_arguments));
+    Benchmark::Deactivate(2);
   } catch (...) {
     interpreter::BytecodeInterpreter::ExecuteFunction(
         tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
@@ -238,6 +289,9 @@ void Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  Benchmark::Stop(1, "interpreter execute " + name_opt + "plan");
+  Benchmark::Start(1, "interpreter execute " + name_opt + "teardown");
+
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
   interpreter::BytecodeInterpreter::ExecuteFunction(
@@ -248,6 +302,8 @@ void Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Stop();
     stats->tear_down_ms = timer.GetDuration();
   }
+
+  Benchmark::Stop(1, "interpreter execute " + name_opt + "teardown");
 }
 
 }  // namespace codegen
