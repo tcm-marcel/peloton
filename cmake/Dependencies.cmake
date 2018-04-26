@@ -104,3 +104,11 @@ add_custom_target(iwyu
     COMMENT "Running include-what-you-use tool"
     VERBATIM
 )
+
+# ---[ PCM
+include_directories(SYSTEM /home/marcel/dev/analysis/pcm/)
+list(APPEND Peloton_LINKER_LIBS /home/marcel/dev/analysis/pcm/libPCM.a)
+        #/home/marcel/dev/analysis/pcm/pci.o
+        #/home/marcel/dev/analysis/pcm/msr.o
+        #/home/marcel/dev/analysis/pcm/client_bw.o
+        #/home/marcel/dev/analysis/pcm/cpucounters.o)

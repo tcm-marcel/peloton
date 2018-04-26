@@ -17,6 +17,7 @@
 
 #include "codegen/codegen.h"
 #include "common/exception.h"
+#include "common/benchmark.h"
 
 namespace peloton {
 namespace codegen {
@@ -35,14 +36,22 @@ BytecodeFunction BytecodeBuilder::CreateBytecodeFunction(
     const CodeContext &code_context, const llvm::Function *function,
     bool use_naive_register_allocator) {
   BytecodeBuilder builder(code_context, function);
+
+  auto b_analyse = BENCHMARK(2, "bytecode builder analyse", builder.bytecode_function_.function_name_);
+  auto b_translate = BENCHMARK(2, "bytecode builder translate", builder.bytecode_function_.function_name_);
+
+  b_analyse.Start();
   builder.AnalyseFunction();
+  b_analyse.Stop();
 
   if (use_naive_register_allocator)
     builder.PerformNaiveRegisterAllocation();
   else
     builder.PerformGreedyRegisterAllocation();
 
+  b_translate.Start();
   builder.TranslateFunction();
+  b_translate.Stop();
   builder.Finalize();
 
   return std::move(builder.bytecode_function_);

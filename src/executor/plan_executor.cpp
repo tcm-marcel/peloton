@@ -23,6 +23,8 @@
 #include "settings/settings_manager.h"
 #include "storage/tuple_iterator.h"
 
+#include "common/benchmark.h"
+
 namespace peloton {
 namespace executor {
 
@@ -54,15 +56,16 @@ static void CompileAndExecutePlan(
                                     codegen::QueryParameters(*plan, params)));
 
   // Compile the query
-  codegen::Query *query = codegen::QueryCache::Instance().Find(plan);
-  if (query == nullptr) {
-    codegen::QueryCompiler compiler;
-    auto compiled_query = compiler.Compile(
-        *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
-    compiled_query->Compile();
-    query = compiled_query.get();
-    codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
-  }
+
+  //codegen::Query *query = codegen::QueryCache::Instance().Find(plan);
+  //if (query == nullptr) {
+  codegen::QueryCompiler compiler;
+  auto compiled_query = compiler.Compile(
+      *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
+  compiled_query->Compile();
+  codegen::Query *query = compiled_query.get();
+  codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
+  //}
 
   auto on_query_result = [&on_complete, &consumer,
                           plan](executor::ExecutionResult result) {
@@ -151,20 +154,26 @@ void PlanExecutor::ExecutePlan(
   bool codegen_enabled =
       settings::SettingsManager::GetBool(settings::SettingId::codegen);
 
-  try {
-    if (codegen_enabled && codegen::QueryCompiler::IsSupported(*plan)) {
-      CompileAndExecutePlan(plan, txn, params, on_complete);
-    } else {
-      InterpretPlan(plan, txn, params, result_format, on_complete);
+  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::PlanInterpreter)
+    InterpretPlan(plan, txn, params, result_format, on_complete);
+  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
+
+    try {
+      if (codegen_enabled && codegen::QueryCompiler::IsSupported(*plan)) {
+        CompileAndExecutePlan(plan, txn, params, on_complete);
+      } else {
+        InterpretPlan(plan, txn, params, result_format, on_complete);
+      }
+    } catch (Exception &e) {
+      ExecutionResult result;
+      result.m_result = ResultType::FAILURE;
+      result.m_error_message = e.what();
+      LOG_ERROR("Error thrown during execution: %s",
+                result.m_error_message.c_str());
+      on_complete(result, {});
     }
-  } catch (Exception &e) {
-    ExecutionResult result;
-    result.m_result = ResultType::FAILURE;
-    result.m_error_message = e.what();
-    LOG_ERROR("Error thrown during execution: %s",
-              result.m_error_message.c_str());
-    on_complete(result, {});
-  }
+  } else
+    CompileAndExecutePlan(plan, txn, params, on_complete);
 }
 
 // FIXME this function is here temporarily to support PelotonService

@@ -11,11 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "codegen/interpreter/bytecode_interpreter.h"
+
 #include "codegen/interpreter/bytecode_function.h"
+#include "common/benchmark.h"
 
 namespace peloton {
 namespace codegen {
 namespace interpreter {
+
 
 /** This is the actual dispatch code: It lookups the destination handler address
  *  in the label_pointers_ array and performs a direct jump there.
@@ -63,12 +66,20 @@ NEVER_INLINE NO_CLONE void BytecodeInterpreter::ExecuteFunction(
 #include "codegen/interpreter/bytecode_instructions.def"
   }
 
+  auto b_setup = BENCHMARK(2, "interpreter setup", bytecode_function_.function_name_);
+  auto b_execution = BENCHMARK(2, "interpreter dispatch area", bytecode_function_.function_name_);
+
+  b_setup.Start();
+
   InitializeActivationRecord(arguments);
 
   // Get initial instruction pointer
   const Instruction *bytecode =
       reinterpret_cast<const Instruction *>(&bytecode_function_.bytecode_[0]);
   const Instruction *ip = bytecode;
+
+  b_setup.Stop();
+  b_execution.Start();
 
   // Start execution with first instruction
   INTERPRETER_DISPATCH_GOTO(ip);
@@ -97,6 +108,7 @@ NEVER_INLINE NO_CLONE void BytecodeInterpreter::ExecuteFunction(
   _ret:                                                           \
   TRACE_CODE_PRE;                                                 \
   GetValueReference<value_t>(0) = GetValue<value_t>(ip->args[0]); \
+  b_execution.Stop(); \
   return;
 
 #define HANDLE_TYPED_INST(op, type) \

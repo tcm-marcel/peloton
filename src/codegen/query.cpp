@@ -19,6 +19,8 @@
 #include "executor/plan_executor.h"
 #include "settings/settings_manager.h"
 
+#include "common/benchmark.h"
+
 namespace peloton {
 namespace codegen {
 
@@ -50,23 +52,31 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   func_args->query_parameters = &executor_context->GetParams();
   func_args->consumer_arg = consumer.GetConsumerState();
 
-  bool force_interpreter = settings::SettingsManager::GetBool(
-      settings::SettingId::codegen_interpreter);
+  auto b_execute = BENCHMARK(1, "query execute", std::to_string(code_context_.GetID()));
+  b_execute.Start();
 
-  if (is_compiled_ && !force_interpreter) {
+  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreter)
+    ExecuteInterpreter(func_args, stats);
+  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative) {
     ExecuteNative(func_args, stats);
-  } else {
-    try {
-      ExecuteInterpreter(func_args, stats);
-    } catch (interpreter::NotSupportedException e) {
-      LOG_ERROR("query not supported by interpreter: %s", e.what());
+  } else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
+    if (is_compiled_) {
+      ExecuteNative(func_args, stats);
+    } else {
+      try {
+        ExecuteInterpreter(func_args, stats);
+      } catch (interpreter::NotSupportedException e) {
+        LOG_ERROR("query not supported by interpreter: %s", e.what());
 
-      executor::ExecutionResult result;
-      result.m_result = ResultType::INVALID;
-      on_complete(result);
-      return;
+        executor::ExecutionResult result;
+        result.m_result = ResultType::INVALID;
+        on_complete(result);
+        return;
+      }
     }
   }
+
+  b_execute.Stop();
 
   executor::ExecutionResult result;
   result.m_result = ResultType::SUCCESS;
@@ -80,13 +90,17 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
   // verify the functions
   // will also be done by Optimize() or Compile() if not done before,
   // but we do not want to mix up the timings, so do it here
+
   code_context_.Verify();
 
   // optimize the functions
   // TODO(marcel): add switch to enable/disable optimization
   // TODO(marcel): add timer to measure time used for optimization (see
   // RuntimeStats)
+  auto b_optimize = BENCHMARK(1, "query llvm optimize", std::to_string(code_context_.GetID()));
+  b_optimize.Start();
   code_context_.Optimize();
+  b_optimize.Stop();
 
   is_compiled_ = false;
 }
@@ -98,9 +112,14 @@ void Query::Compile(CompileStats *stats) {
     timer.Start();
   }
 
+  auto b_compile = BENCHMARK(1, "query llvm compile", std::to_string(code_context_.GetID()));
+  b_compile.Start();
+
   // Compile all functions in context
   LOG_TRACE("Starting Query compilation ...");
   code_context_.Compile();
+
+  b_compile.Stop();
 
   // Get pointers to the JITed functions
   compiled_functions_.init_func =
