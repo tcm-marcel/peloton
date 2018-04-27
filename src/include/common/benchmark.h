@@ -12,6 +12,10 @@
 
 #pragma once
 
+#define BENCHMARK_LEVEL 0
+#define BENCHMARK_PCM false
+#define BENCHMARK_TIMER true
+
 #include <cpucounters.h>
 #include <iostream>
 #include <fstream>
@@ -19,10 +23,6 @@
 #include "common/macros.h"
 #include "common/logger.h"
 #include "common/timer.h"
-
-#define BENCHMARK_LEVEL 0
-#define BENCHMARK_PCM false
-#define BENCHMARK_TIMER true
 
 
 #define BENCHMARK(level, s, a) BENCHMARK_##level(s, a)
@@ -96,31 +96,6 @@ class Benchmark {
   Timer<std::ratio<1, 1000>> timer_;
 
  private:
-
-  class PCMInit {
-   public:
-    PCMInit() {
-      if (use_pcm_) {
-        PCM *m = PCM::getInstance();
-        m->resetPMU();
-        PCM::ErrorCode returnResult = m->program();
-
-        if (returnResult != PCM::Success) {
-          LOG_ERROR("Intel's PCM couldn't start");
-          LOG_ERROR("Error code: %d", returnResult);
-          exit(1);
-        } else {
-          LOG_INFO("Intel's PCM setup done");
-        }
-      }
-    }
-  };
-
-  #if BENCHMARK_PCM
-  // pcm initialization
-  static PCMInit pcm_init_;
-  #endif
-
   // configuration
   static const bool use_timer_ = BENCHMARK_TIMER;
   static const bool use_pcm_= BENCHMARK_PCM;
@@ -145,5 +120,29 @@ class BenchmarkDummy {
   ALWAYS_INLINE inline void Start() {}
   ALWAYS_INLINE inline void Stop() {}
 };
+
+#if BENCHMARK_PCM
+class PCMInit {
+ public:
+  PCMInit() {
+    if (BENCHMARK_PCM) {
+      PCM *m = PCM::getInstance();
+      m->resetPMU();
+      PCM::ErrorCode returnResult = m->program();
+
+      if (returnResult != PCM::Success) {
+        LOG_ERROR("Intel's PCM couldn't start");
+        LOG_ERROR("Error code: %d", returnResult);
+        exit(1);
+      } else {
+        LOG_INFO("Intel's PCM setup done");
+      }
+    }
+  }
+
+  // pcm initialization
+  static PCMInit pcm_init_;
+};
+#endif
 
 }  // namespace peloton

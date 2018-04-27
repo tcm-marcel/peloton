@@ -15,7 +15,7 @@
 namespace peloton {
 
 #if BENCHMARK_PCM
-Benchmark::PCMInit Benchmark::pcm_init_;
+PCMInit PCMInit::pcm_init_;
 #endif
 
 bool Benchmark::active_ = false;
