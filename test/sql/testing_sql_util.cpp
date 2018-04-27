@@ -56,7 +56,8 @@ void TestingSQLUtil::ShowTable(std::string database_name,
 ResultType TestingSQLUtil::ExecuteSQLQuery(
     const std::string query, std::vector<ResultValue> &result,
     std::vector<FieldInfo> &tuple_descriptor, int &rows_changed,
-    std::string &error_message) {
+    std::string &error_message,
+    IsolationLevelType isolation_level) {
   LOG_INFO("Query: %s", query.c_str());
   // prepareStatement
   std::string unnamed_statement = "unnamed";
@@ -81,7 +82,7 @@ ResultType TestingSQLUtil::ExecuteSQLQuery(
   // SetTrafficCopCounter();
   counter_.store(1);
   auto status = traffic_cop_.ExecuteStatement(statement, param_values, unnamed,
-                                              nullptr, result_format, result);
+                                              nullptr, result_format, result, 0, isolation_level);
   if (traffic_cop_.GetQueuing()) {
     ContinueAfterComplete();
     traffic_cop_.ExecuteStatementPlanGetResult();
@@ -102,11 +103,12 @@ ResultType TestingSQLUtil::ExecuteSQLQueryWithOptimizer(
     std::unique_ptr<optimizer::AbstractOptimizer> &optimizer,
     const std::string query, std::vector<ResultValue> &result,
     std::vector<FieldInfo> &tuple_descriptor, int &rows_changed,
-    std::string &error_message) {
+    std::string &error_message,
+    IsolationLevelType isolation_level) {
   auto &peloton_parser = parser::PostgresParser::GetInstance();
   std::vector<type::Value> params;
   auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
-  auto txn = txn_manager.BeginTransaction();
+  auto txn = txn_manager.BeginTransaction(0, isolation_level);
   traffic_cop_.SetTcopTxnState(txn);
 
   auto parsed_stmt = peloton_parser.BuildParseTree(query);
@@ -124,7 +126,7 @@ ResultType TestingSQLUtil::ExecuteSQLQueryWithOptimizer(
     // SetTrafficCopCounter();
     counter_.store(1);
     auto status =
-        traffic_cop_.ExecuteHelper(plan, params, result, result_format);
+        traffic_cop_.ExecuteHelper(plan, params, result, result_format, 0, isolation_level);
     if (traffic_cop_.GetQueuing()) {
       TestingSQLUtil::ContinueAfterComplete();
       traffic_cop_.ExecuteStatementPlanGetResult();
@@ -158,7 +160,8 @@ TestingSQLUtil::GeneratePlanWithOptimizer(
 }
 
 ResultType TestingSQLUtil::ExecuteSQLQuery(const std::string query,
-                                           std::vector<ResultValue> &result) {
+                                           std::vector<ResultValue> &result,
+                                           IsolationLevelType isolation_level) {
   std::vector<FieldInfo> tuple_descriptor;
 
   // prepareStatement
@@ -182,7 +185,7 @@ ResultType TestingSQLUtil::ExecuteSQLQuery(const std::string query,
   // SetTrafficCopCounter();
   counter_.store(1);
   auto status = traffic_cop_.ExecuteStatement(statement, param_values, unnamed,
-                                              nullptr, result_format, result);
+                                              nullptr, result_format, result, 0, isolation_level);
   if (traffic_cop_.GetQueuing()) {
     ContinueAfterComplete();
     traffic_cop_.ExecuteStatementPlanGetResult();
@@ -195,7 +198,8 @@ ResultType TestingSQLUtil::ExecuteSQLQuery(const std::string query,
   return status;
 }
 
-ResultType TestingSQLUtil::ExecuteSQLQuery(const std::string query) {
+ResultType TestingSQLUtil::ExecuteSQLQuery(const std::string query,
+                                           IsolationLevelType isolation_level) {
   std::vector<ResultValue> result;
   std::vector<FieldInfo> tuple_descriptor;
 
@@ -221,7 +225,7 @@ ResultType TestingSQLUtil::ExecuteSQLQuery(const std::string query) {
   // SetTrafficCopCounter();
   counter_.store(1);
   auto status = traffic_cop_.ExecuteStatement(statement, param_values, unnamed,
-                                              nullptr, result_format, result);
+                                              nullptr, result_format, result, 0, isolation_level);
   if (traffic_cop_.GetQueuing()) {
     ContinueAfterComplete();
     traffic_cop_.ExecuteStatementPlanGetResult();

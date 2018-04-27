@@ -152,7 +152,8 @@ ResultType TrafficCop::ExecuteStatementGetResult() {
 executor::ExecutionResult TrafficCop::ExecuteHelper(
     std::shared_ptr<planner::AbstractPlan> plan,
     const std::vector<type::Value> &params, std::vector<ResultValue> &result,
-    const std::vector<int> &result_format, size_t thread_id) {
+    const std::vector<int> &result_format, size_t thread_id,
+IsolationLevelType isolation_level) {
   auto &curr_state = GetCurrentTxnState();
 
   concurrency::TransactionContext *txn;
@@ -164,7 +165,7 @@ executor::ExecutionResult TrafficCop::ExecuteHelper(
     // new txn, reset result status
     curr_state.second = ResultType::SUCCESS;
     single_statement_txn_ = true;
-    txn = txn_manager.BeginTransaction(thread_id);
+    txn = txn_manager.BeginTransaction(thread_id, isolation_level);
     tcop_txn_state_.emplace(txn, ResultType::SUCCESS);
   }
 
@@ -548,7 +549,7 @@ ResultType TrafficCop::ExecuteStatement(
     const std::vector<type::Value> &params, UNUSED_ATTRIBUTE bool unnamed,
     std::shared_ptr<stats::QueryMetric::QueryParams> param_stats,
     const std::vector<int> &result_format, std::vector<ResultValue> &result,
-    size_t thread_id) {
+    size_t thread_id, IsolationLevelType isolation_level) {
   // TODO(Tianyi) Further simplify this API
   if (static_cast<StatsType>(settings::SettingsManager::GetInt(
           settings::SettingId::stats_mode)) != StatsType::INVALID) {
@@ -595,7 +596,7 @@ ResultType TrafficCop::ExecuteStatement(
         }
 
         ExecuteHelper(statement->GetPlanTree(), params, result, result_format,
-                      thread_id);
+                      thread_id, isolation_level);
         if (GetQueuing()) {
           return ResultType::QUEUING;
         } else {

@@ -134,6 +134,31 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     catalog::Catalog::GetInstance()->DropDatabaseWithName(DEFAULT_DB_NAME, txn);
     txn_manager.CommitTransaction(txn);
   }
+
+  void DoForAllExecutionMethods(std::string section, std::function<void ()> func) {
+    Benchmark::active_ = true;
+
+    Benchmark::execution_method_ = Benchmark::ExecutionMethod::PlanInterpreter;
+    auto b1 = BENCHMARK(0, section, "plan interpreter");
+    b1.Start();
+    func();
+    b1.Stop();
+
+    Benchmark::execution_method_ = Benchmark::ExecutionMethod::LLVMNative;
+    auto b2 = BENCHMARK(0, section, "llvm native");
+    b2.Start();
+    func();
+    b2.Stop();
+
+    Benchmark::execution_method_ = Benchmark::ExecutionMethod::LLVMInterpreter;
+    auto b3 = BENCHMARK(0, section, "llvm interpreter");
+    b3.Start();
+    func();
+    b3.Stop();
+
+    Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
+    Benchmark::active_ = false;
+  }
 };
 
 TEST_F(InterpreterBenchmark, CreateTables) {
@@ -148,40 +173,33 @@ TEST_F(InterpreterBenchmark, LoadData) {
 
 
 TEST_F(InterpreterBenchmark, Q1) {
-  Benchmark::execution_method_ = Benchmark::ExecutionMethod::LLVMInterpreter;
+  DoForAllExecutionMethods("TPC-H Q1", [] () {
+    auto result = TestingSQLUtil::ExecuteSQLQuery(
+        "select "
+        "l_returnflag, "
+        "l_linestatus, "
+        "sum(l_quantity) as sum_qty, "
+        "sum(l_extendedprice) as sum_base_price, "
+        "sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, "
+        "sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, "
+        "avg(l_quantity) as avg_qty, "
+        "avg(l_extendedprice) as avg_price, "
+        "avg(l_discount) as avg_disc, "
+        "count(*) as count_order "
+        "from "
+        "lineitem "
+        "where "
+        "  l_shipdate <= date '1998-12-01' "
+        "group by "
+        "l_returnflag, "
+        "l_linestatus; "
+        //"order by "
+        //"l_returnflag, "
+        //"l_linestatus; "
+    );
 
-  auto b_execution = BENCHMARK(0, "complete execution", "Q1");
-
-  b_execution.Start();
-
-  auto result = TestingSQLUtil::ExecuteSQLQuery(
-      "select "
-      "l_returnflag, "
-      "l_linestatus, "
-      "sum(l_quantity) as sum_qty, "
-      "sum(l_extendedprice) as sum_base_price, "
-      "sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, "
-      "sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, "
-      "avg(l_quantity) as avg_qty, "
-      "avg(l_extendedprice) as avg_price, "
-      "avg(l_discount) as avg_disc, "
-      "count(*) as count_order "
-      "from "
-      "lineitem "
-      "where "
-      "  l_shipdate <= date '1998-12-01' "
-      "group by "
-      "l_returnflag, "
-      "l_linestatus; "
-      //"order by "
-      //"l_returnflag, "
-      //"l_linestatus; "
-      );
-  ASSERT_EQ(result, ResultType::SUCCESS);
-
-  b_execution.Stop();
-
-  Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
+    ASSERT_EQ(result, ResultType::SUCCESS);
+  });
 }
 
 TEST_F(InterpreterBenchmark, DropTables) {

@@ -21,6 +21,9 @@
 #include "common/timer.h"
 
 #define BENCHMARK_LEVEL 0
+#define BENCHMARK_PCM false
+#define BENCHMARK_TIMER true
+
 
 #define BENCHMARK(level, s, a) BENCHMARK_##level(s, a)
 
@@ -49,6 +52,8 @@ class Benchmark {
   Benchmark(std::string section = "", std::string activation = "") : section_(section), activation_(activation)  {}
 
   ALWAYS_INLINE inline void Start() {
+    if (!active_) return;
+
     if (use_timer_) {
       timer_.Reset();
       timer_.Start();
@@ -59,6 +64,8 @@ class Benchmark {
   }
 
   ALWAYS_INLINE inline void Stop() {
+    if (!active_) return;
+
     if (use_timer_) {
       timer_.Stop();
     }
@@ -109,12 +116,14 @@ class Benchmark {
     }
   };
 
+  #if BENCHMARK_PCM
   // pcm initialization
   static PCMInit pcm_init_;
+  #endif
 
   // configuration
-  static const bool use_timer_ = true;
-  static const bool use_pcm_= false;
+  static const bool use_timer_ = BENCHMARK_TIMER;
+  static const bool use_pcm_= BENCHMARK_PCM;
 
  public:
 
@@ -127,6 +136,7 @@ class Benchmark {
   };
 
   static ExecutionMethod execution_method_;
+  static bool active_;
 };
 
 class BenchmarkDummy {

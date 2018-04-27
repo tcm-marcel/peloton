@@ -45,12 +45,14 @@ class TestingSQLUtil {
                                     std::vector<ResultValue> &result,
                                     std::vector<FieldInfo> &tuple_descriptor,
                                     int &rows_affected,
-                                    std::string &error_message);
+                                    std::string &error_message,
+                                    IsolationLevelType isolation_level = IsolationLevelType::SERIALIZABLE);
 
   static ResultType ExecuteSQLQuery(const std::string query,
                                     std::vector<ResultValue> &result,
                                     std::vector<FieldInfo> &tuple_descriptor,
-                                    int &rows_affected);
+                                    int &rows_affected,
+                                    IsolationLevelType isolation_level = IsolationLevelType::SERIALIZABLE);
 
   // Execute a SQL query end-to-end with the specific optimizer
   // Note: right now this is not executed in the context of a transaction, we
@@ -60,7 +62,8 @@ class TestingSQLUtil {
       std::unique_ptr<optimizer::AbstractOptimizer> &optimizer,
       const std::string query, std::vector<ResultValue> &result,
       std::vector<FieldInfo> &tuple_descriptor, int &rows_changed,
-      std::string &error_message);
+      std::string &error_message,
+      IsolationLevelType isolation_level = IsolationLevelType::SERIALIZABLE);
 
   // Generate the plan tree for a SQL query with the specific optimizer
   static std::shared_ptr<planner::AbstractPlan> GeneratePlanWithOptimizer(
@@ -69,10 +72,12 @@ class TestingSQLUtil {
 
   // A simpler wrapper around ExecuteSQLQuery
   static ResultType ExecuteSQLQuery(const std::string query,
-                                    std::vector<ResultValue> &result);
+                                    std::vector<ResultValue> &result,
+                                    IsolationLevelType isolation_level = IsolationLevelType::SERIALIZABLE);
 
   // A another simpler wrapper around ExecuteSQLQuery
-  static ResultType ExecuteSQLQuery(const std::string query);
+  static ResultType ExecuteSQLQuery(const std::string query,
+                                    IsolationLevelType isolation_level = IsolationLevelType::SERIALIZABLE);
 
   // Executes a query and compares the result with the given rows, either
   // ordered or not
