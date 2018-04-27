@@ -27,8 +27,6 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   }
 
  public:
-  oid_t TestTableId() { return test_table_oids[0]; }
-
   void CreateTables() {
     auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
     auto txn = txn_manager.BeginTransaction();
@@ -124,7 +122,25 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   }
 
   void LoadData() {
+    auto h = [] (std::vector<uint8_t> c) {
+      std::vector<bool> r;
+      for (uint8_t i = 1; i <= *c.end(); i++) {
+        if (std::find(c.begin(), c.end(), i) != c.end())
+          r.push_back(true);
+        else
+          r.push_back(false);
+      }
+      return r;
+    };
 
+    LoadDataFromFile("nation", {false, true, false, true});
+    LoadDataFromFile("region", {false, true, true});
+    LoadDataFromFile("part", {false, true, true, true, true, false, true, false, true});
+    LoadDataFromFile("supplier", {false, true, true, false, true, false, true});
+    LoadDataFromFile("partsupp", {false, false, false, false, true});
+    LoadDataFromFile("customer", {false, true, true, false, true, false, true, true});
+    LoadDataFromFile("orders", {false, false, true, false, true, true, true, false, true});
+    LoadDataFromFile("lineitem", h({9, 10, 14, 15, 16}));
   }
 
   void DropTables() {
@@ -159,6 +175,105 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
     Benchmark::active_ = false;
   }
+
+  /*
+  template<typename type, typename... types>
+  void ParseTuple(storage::Tuple &tuple) {
+    ParseTuple<types>(tuple);
+
+    auto value = type::ValueFactory::GetIntegerValue();
+    tuple.SetValue(sizeof...(types), value);
+
+  };
+
+  template<>
+  void ParseTuple(storage::Tuple &tuple) {};
+
+  void InsertTuple(storage::DataTable *table) {
+    auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+
+    // Start a txn for each insert
+    auto txn = txn_manager.BeginTransaction();
+    std::unique_ptr<storage::Tuple> tuple();
+
+    std::unique_ptr<executor::ExecutorContext> context(
+        new executor::ExecutorContext(txn));
+
+    planner::InsertPlan node(table, std::move(tuple));
+
+    // Insert the desired # of tuples
+    for (oid_t tuple_itr = 0; tuple_itr < tuple_count; tuple_itr++) {
+      executor::InsertExecutor executor(&node, context.get());
+      executor.Execute();
+    }
+
+    txn_manager.CommitTransaction(txn);
+  }
+  */
+
+  size_t GetNumberLines(std::string path) const {
+    std::ifstream in(path);
+
+    // new lines will be skipped unless we stop it from happening:
+    in.unsetf(std::ios_base::skipws);
+
+    // count the newlines with an algorithm specialized for counting:
+    size_t line_count = std::count(
+        std::istream_iterator<char>(in),
+        std::istream_iterator<char>(),
+        '\n');
+
+    return line_count;
+  }
+
+  void LoadDataFromFile(std::string table, std::vector<bool> columns) {
+    std::string in_path = data_path_ + table + ".tbl";
+    LOG_INFO("Loading from file: %s ...", in_path.c_str());
+    uint64_t e = GetNumberLines(in_path);
+
+    std::ifstream file_in(in_path);
+    std::string line;
+    uint64_t i = 0;
+
+    if (!file_in.is_open())
+      std::perror("Error opening data file");
+
+    while(std::getline(file_in, line)) {
+      if (i % 1000 == 0) {
+        LOG_INFO("  %lu%% ...", (size_t) (i * 100 / e));
+      }
+      std::istringstream line_in(line);
+      std::string sql = "INSERT INTO " + table + " VALUES (";
+
+      for (unsigned int j = 0; j < columns.size(); j++) {
+        std::string cell;
+        std::getline(line_in, cell, '|');
+
+        if (columns[j])
+          sql += "'" + cell + "'";
+        else
+          sql += cell;
+
+        if (j < columns.size() - 1)
+          sql += ", ";
+      }
+
+      sql += ");";
+
+      auto result = TestingSQLUtil::ExecuteSQLQuery(sql);
+      ASSERT_EQ(result, ResultType::SUCCESS);
+
+      i++;
+    }
+
+    if (file_in.bad())
+      std::perror("Error reading data file");
+
+    LOG_INFO("  ...loaded %lu tuples", i);
+  };
+
+  // configuration
+  const std::string data_path_ = "/home/marcel/dev/peloton/tpch-dbgen/data/";
 };
 
 TEST_F(InterpreterBenchmark, CreateTables) {
@@ -172,7 +287,7 @@ TEST_F(InterpreterBenchmark, LoadData) {
 }
 
 
-TEST_F(InterpreterBenchmark, Q1) {
+TEST_F(InterpreterBenchmark, DISABLED_Q1) {
   DoForAllExecutionMethods("TPC-H Q1", [] () {
     auto result = TestingSQLUtil::ExecuteSQLQuery(
         "select "
