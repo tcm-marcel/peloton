@@ -299,13 +299,13 @@ TEST_F(InterpreterBenchmark, CreateTables) {
   CreateTables();
 }
 
-TEST_F(InterpreterBenchmark, LoadData) {
+TEST_F(InterpreterBenchmark, DISABLED_LoadData) {
   Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
   LoadData();
 }
 
 
-TEST_F(InterpreterBenchmark, DISABLED_Q1) {
+TEST_F(InterpreterBenchmark, Q1) {
   DoForAllExecutionMethods("TPC-H Q1", [] () {
     auto result = TestingSQLUtil::ExecuteSQLQuery(
         "select "
@@ -329,6 +329,71 @@ TEST_F(InterpreterBenchmark, DISABLED_Q1) {
         //"order by "
         //"l_returnflag, "
         //"l_linestatus; "
+    );
+
+    ASSERT_EQ(result, ResultType::SUCCESS);
+  });
+}
+
+
+TEST_F(InterpreterBenchmark, Q3) {
+  DoForAllExecutionMethods("TPC-H Q3", [] () {
+    auto result = TestingSQLUtil::ExecuteSQLQuery(
+        "select "
+        "l_orderkey, "
+        "sum(l_extendedprice * (1 - l_discount)) as revenue, "
+        "o_orderdate, "
+        "o_shippriority "
+        "from "
+        "customer, "
+        "orders, "
+        "lineitem "
+        "where "
+        "c_mktsegment = 'MACHINERY' "
+        "and c_custkey = o_custkey "
+        "and l_orderkey = o_orderkey "
+        "and o_orderdate < date '1995-03-10' "
+        "and l_shipdate > date '1995-03-10' "
+        "group by "
+        "l_orderkey, "
+        "o_orderdate, "
+        "o_shippriority;"
+//        "order by "
+//        "sum(l_extendedprice * (1 - l_discount)) desc, "
+//        "o_orderdate; "
+    );
+
+    ASSERT_EQ(result, ResultType::SUCCESS);
+  });
+}
+
+TEST_F(InterpreterBenchmark, Q5) {
+  DoForAllExecutionMethods("TPC-H Q5", [] () {
+    auto result = TestingSQLUtil::ExecuteSQLQuery(
+        "select "
+        "n_name, "
+        "sum(l_extendedprice * (1 - l_discount)) as revenue "
+        "from "
+        "customer, "
+        "orders, "
+        "lineitem, "
+        "supplier, "
+        "nation, "
+        "region "
+        "where "
+        "c_custkey = o_custkey "
+        "and l_orderkey = o_orderkey "
+        "and l_suppkey = s_suppkey "
+        "and c_nationkey = s_nationkey "
+        "and s_nationkey = n_nationkey "
+        "and n_regionkey = r_regionkey "
+        "and r_name = 'AFRICA' "
+        "and o_orderdate >= date '1997-01-01' "
+        "and o_orderdate < date '1998-01-01' "
+        "group by "
+        "n_name; "
+//        "order by"
+//        "sum(l_extendedprice * (1 - l_discount)) desc;"
     );
 
     ASSERT_EQ(result, ResultType::SUCCESS);
