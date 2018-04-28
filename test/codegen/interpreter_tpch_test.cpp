@@ -121,6 +121,39 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     ASSERT_EQ(result, ResultType::SUCCESS);
   }
 
+  class LoadBar {
+   public:
+    LoadBar(InterpreterBenchmark &test, std::vector<std::string> files) : i_(0) {
+      sum_ = 0;
+      for (auto &f : files)
+        sum_ += GetNumberLines(test.data_path_ + f + ".tbl");
+
+      LOG_INFO("%lu tuples will be loaded", sum_);
+    }
+
+    void DumpPercentage() {
+      LOG_INFO("  %lu%% ...", (size_t) (i_ * 100 / sum_));
+    }
+
+    size_t GetNumberLines(std::string f) const {
+      std::ifstream in(f);
+
+      // new lines will be skipped unless we stop it from happening:
+      in.unsetf(std::ios_base::skipws);
+
+      // count the newlines with an algorithm specialized for counting:
+      size_t line_count = std::count(
+          std::istream_iterator<char>(in),
+          std::istream_iterator<char>(),
+          '\n');
+
+      return line_count;
+    }
+
+    size_t sum_;
+    size_t i_;
+  };
+
   void LoadData() {
     auto h = [] (std::vector<uint8_t> c) {
       std::vector<bool> r;
@@ -133,14 +166,16 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
       return r;
     };
 
-    LoadDataFromFile("nation", {false, true, false, true});
-    LoadDataFromFile("region", {false, true, true});
-    LoadDataFromFile("part", {false, true, true, true, true, false, true, false, true});
-    LoadDataFromFile("supplier", {false, true, true, false, true, false, true});
-    LoadDataFromFile("partsupp", {false, false, false, false, true});
-    LoadDataFromFile("customer", {false, true, true, false, true, false, true, true});
-    LoadDataFromFile("orders", {false, false, true, false, true, true, true, false, true});
-    LoadDataFromFile("lineitem", h({9, 10, 14, 15, 16}));
+    LoadBar b(*this, {"nation", "region", "part", "supplier", "partsupp", "customer", "orders", "lineitem"});
+
+    LoadDataFromFile("nation", b, {false, true, false, true});
+    LoadDataFromFile("region", b, {false, true, true});
+    LoadDataFromFile("part", b, {false, true, true, true, true, false, true, false, true});
+    LoadDataFromFile("supplier", b, {false, true, true, false, true, false, true});
+    LoadDataFromFile("partsupp", b, {false, false, false, false, true});
+    LoadDataFromFile("customer", b, {false, true, true, false, true, false, true, true});
+    LoadDataFromFile("orders", b, {false, false, true, false, true, true, true, false, true});
+    LoadDataFromFile("lineitem", b, h({9, 10, 14, 15, 16}));
   }
 
   void DropTables() {
@@ -211,25 +246,9 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   }
   */
 
-  size_t GetNumberLines(std::string path) const {
-    std::ifstream in(path);
-
-    // new lines will be skipped unless we stop it from happening:
-    in.unsetf(std::ios_base::skipws);
-
-    // count the newlines with an algorithm specialized for counting:
-    size_t line_count = std::count(
-        std::istream_iterator<char>(in),
-        std::istream_iterator<char>(),
-        '\n');
-
-    return line_count;
-  }
-
-  void LoadDataFromFile(std::string table, std::vector<bool> columns) {
+  void LoadDataFromFile(std::string table, LoadBar &b, std::vector<bool> columns) {
     std::string in_path = data_path_ + table + ".tbl";
-    LOG_INFO("Loading from file: %s ...", in_path.c_str());
-    uint64_t e = GetNumberLines(in_path);
+    LOG_INFO("Loading from file: %s", in_path.c_str());
 
     std::ifstream file_in(in_path);
     std::string line;
@@ -240,7 +259,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
 
     while(std::getline(file_in, line)) {
       if (i % 1000 == 0) {
-        LOG_INFO("  %lu%% ...", (size_t) (i * 100 / e));
+        b.DumpPercentage();
       }
       std::istringstream line_in(line);
       std::string sql = "INSERT INTO " + table + " VALUES (";
@@ -264,12 +283,11 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
       ASSERT_EQ(result, ResultType::SUCCESS);
 
       i++;
+      b.i_++;
     }
 
     if (file_in.bad())
       std::perror("Error reading data file");
-
-    LOG_INFO("  ...loaded %lu tuples", i);
   };
 
   // configuration
