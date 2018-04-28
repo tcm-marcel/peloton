@@ -299,7 +299,7 @@ TEST_F(InterpreterBenchmark, CreateTables) {
   CreateTables();
 }
 
-TEST_F(InterpreterBenchmark, DISABLED_LoadData) {
+TEST_F(InterpreterBenchmark, LoadData) {
   Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
   LoadData();
 }
