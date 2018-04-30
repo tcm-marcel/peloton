@@ -14,6 +14,7 @@
 #include "codegen/testing_codegen_util.h"
 #include "concurrency/transaction_manager_factory.h"
 #include "sql/testing_sql_util.h"
+#include "common/tpch_loader.h"
 
 namespace peloton {
 namespace test {
@@ -155,27 +156,8 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   };
 
   void LoadData() {
-    auto h = [] (std::vector<uint8_t> c) {
-      std::vector<bool> r;
-      for (uint8_t i = 1; i <= *c.end(); i++) {
-        if (std::find(c.begin(), c.end(), i) != c.end())
-          r.push_back(true);
-        else
-          r.push_back(false);
-      }
-      return r;
-    };
-
-    LoadBar b(*this, {"nation", "region", "part", "supplier", "partsupp", "customer", "orders", "lineitem"});
-
-    LoadDataFromFile("nation", b, {false, true, false, true});
-    LoadDataFromFile("region", b, {false, true, true});
-    LoadDataFromFile("part", b, {false, true, true, true, true, false, true, false, true});
-    LoadDataFromFile("supplier", b, {false, true, true, false, true, false, true});
-    LoadDataFromFile("partsupp", b, {false, false, false, false, true});
-    LoadDataFromFile("customer", b, {false, true, true, false, true, false, true, true});
-    LoadDataFromFile("orders", b, {false, false, true, false, true, true, true, false, true});
-    LoadDataFromFile("lineitem", b, h({9, 10, 14, 15, 16}));
+    TPCHLoader loader(*this);
+    loader.Load();
   }
 
   void DropTables() {
@@ -212,40 +194,6 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   }
 
   /*
-  template<typename type, typename... types>
-  void ParseTuple(storage::Tuple &tuple) {
-    ParseTuple<types>(tuple);
-
-    auto value = type::ValueFactory::GetIntegerValue();
-    tuple.SetValue(sizeof...(types), value);
-
-  };
-
-  template<>
-  void ParseTuple(storage::Tuple &tuple) {};
-
-  void InsertTuple(storage::DataTable *table) {
-    auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
-
-    // Start a txn for each insert
-    auto txn = txn_manager.BeginTransaction();
-    std::unique_ptr<storage::Tuple> tuple();
-
-    std::unique_ptr<executor::ExecutorContext> context(
-        new executor::ExecutorContext(txn));
-
-    planner::InsertPlan node(table, std::move(tuple));
-
-    // Insert the desired # of tuples
-    for (oid_t tuple_itr = 0; tuple_itr < tuple_count; tuple_itr++) {
-      executor::InsertExecutor executor(&node, context.get());
-      executor.Execute();
-    }
-
-    txn_manager.CommitTransaction(txn);
-  }
-  */
-
   void LoadDataFromFile(std::string table, LoadBar &b, std::vector<bool> columns) {
     std::string in_path = data_path_ + table + ".tbl";
     LOG_INFO("Loading from file: %s", in_path.c_str());
@@ -289,6 +237,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     if (file_in.bad())
       std::perror("Error reading data file");
   };
+   */
 
   // configuration
   const std::string data_path_ = "/home/marcel/dev/peloton/tpch-dbgen/data/";
