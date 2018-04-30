@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <tbb/concurrent_queue.h>
+#include <tbb/parallel_for_each.h>
 
 #include "codegen/testing_codegen_util.h"
 #include "sql/testing_sql_util.h"
@@ -39,13 +40,59 @@ class TPCHLoader {
  public:
   using TypeId = ::peloton::type::TypeId;
 
-  TPCHLoader(PelotonCodeGenTest &test_class) : test_class_(test_class), number_input_lines_(0), bulk_size_(100) {
-    SetupTableMetadata({"nation", "region", "part", "supplier", "partsupp", "customer", "orders", "lineitem"});
-    number_worker_threads_ = std::thread::hardware_concurrency();
+  TPCHLoader(PelotonCodeGenTest &test_class) : test_class_(test_class),
+                                               number_input_tuples_(0),
+                                               number_consumed_tuples_(0),
+                                               producing_finished_(false),
+                                               bulk_size_(100) {
+    //SetupTableMetadata({"nation", "region", "part", "supplier", "partsupp", "customer", "orders", "lineitem"});
+    SetupTableMetadata({"nation", "region", "part"});
+    number_consumer_threads_ = std::thread::hardware_concurrency();
 
-    insert_queue_.set_capacity(number_worker_threads_);
+    insert_queue_.set_capacity(number_consumer_threads_);
   }
 
+  void Load() {
+    std::vector<std::thread> producer_threads(number_producer_threads_);
+    LOG_INFO("Created %lu producer threads for inserting", number_producer_threads_);
+    for (size_t i = 0; i < number_producer_threads_; i++) {
+      producer_threads[i] = std::thread([this, i](){
+        this->Producer(tables_[i]);
+      });
+    }
+
+    std::vector<std::thread> consumer_threads(number_consumer_threads_);
+    LOG_INFO("Created %lu consumer threads for inserting", number_consumer_threads_);
+    for (auto &thread : consumer_threads) {
+      thread = std::thread([this](){
+        this->Consumer();
+      });
+    }
+
+    // wait for producer to finish
+    for (auto &thread : producer_threads) {
+      thread.join();
+    }
+
+    // abort queue to terminate finished consumer threads
+    LOG_INFO("Sent abort so stop consumer threads");
+    producing_finished_ = true;
+    insert_queue_.abort();
+
+    // wait for consumer to finish
+    for (auto &thread : consumer_threads) {
+      thread.join();
+    }
+  }
+
+ private:
+  struct Table {
+    std::string name;
+    storage::DataTable *data_table;
+    std::vector<TypeId> types;
+  };
+
+ private:
   void SetupTableMetadata(std::vector<std::string> table_names) {
     auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
     auto txn = txn_manager.BeginTransaction();
@@ -65,52 +112,36 @@ class TPCHLoader {
       }
 
       std::string in_path = data_path_ + table_name + ".tbl";
-      number_input_lines_ += GetNumberLines(in_path);
+      number_input_tuples_ += GetNumberLines(in_path);
 
       tables_.push_back({table_name, table, types});
     }
 
     txn_manager.CommitTransaction(txn);
+
+    number_producer_threads_ = table_names.size();
   }
 
-  void Load() {
-    std::vector<std::thread> threads(number_worker_threads_);
-    for (auto &thread : threads) {
-      thread = std::thread([this](){
-        this->Worker();
-      });
-    }
-    LOG_INFO("Created %lu worker threads for inserting", number_worker_threads_);
+  void Producer(Table &table) {
+    std::string in_path = data_path_ + table.name + ".tbl";
+    LOG_INFO("Loading from file: %s", in_path.c_str());
 
-    size_t processed_lines = 0;
+    std::ifstream file(in_path);
 
-    for (auto &table : tables_) {
-      std::string in_path = data_path_ + table.name + ".tbl";
-      LOG_INFO("Loading from file: %s", in_path.c_str());
+    if (!file.is_open())
+      std::perror("Error opening data file");
 
-      std::ifstream file(in_path);
-
-      if (!file.is_open())
-        std::perror("Error opening data file");
-
-      while (file.peek() != EOF) {
-        auto plan = CreateInsertPlan(file, table.data_table, table.types, bulk_size_);
-        //LOG_INFO("Pushed 0x%lX to inserted queue", reinterpret_cast<uintptr_t>(plan.get()));
-        insert_queue_.push(plan.release());
-        processed_lines += bulk_size_;
-
-        LOG_INFO("%d%%", static_cast<int>(processed_lines * 100 / number_input_lines_));
-      }
-    }
-
-    for (auto &thread : threads) {
-      thread.join();
+    while (file.peek() != EOF) {
+      auto plan =
+          CreateInsertPlan(file, table.data_table, table.types, bulk_size_);
+      //LOG_INFO("Pushed 0x%lX to inserted queue", reinterpret_cast<uintptr_t>(plan.get()));
+      insert_queue_.push(plan.release());
     }
   }
 
-  void Worker() {
+  void Consumer() {
     try {
-      while (true) {
+      while (!(producing_finished_ && insert_queue_.size() == 0)) {
         planner::InsertPlan *plan_raw;
 
         // blocking call
@@ -119,6 +150,9 @@ class TPCHLoader {
         std::unique_ptr<planner::InsertPlan> plan(plan_raw);
 
         RunInsertPlan(std::move(plan));
+
+        number_consumed_tuples_ += bulk_size_;
+        LOG_INFO("%d%%", static_cast<int>(number_consumed_tuples_ * 100 / number_input_tuples_));
       }
     } catch (tbb::user_abort exception) {
       return;
@@ -223,16 +257,13 @@ class TPCHLoader {
     return line_count;
   }
 
-  struct Table {
-    std::string name;
-    storage::DataTable *data_table;
-    std::vector<TypeId> types;
-  };
-
   PelotonCodeGenTest &test_class_;
   std::vector<Table> tables_;
-  size_t number_worker_threads_;
-  size_t number_input_lines_;
+  size_t number_producer_threads_;
+  size_t number_consumer_threads_;
+  size_t number_input_tuples_;
+  std::atomic<size_t> number_consumed_tuples_;
+  std::atomic<bool> producing_finished_;
   size_t bulk_size_;
 
   tbb::concurrent_bounded_queue<planner::InsertPlan *> insert_queue_;
