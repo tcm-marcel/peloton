@@ -45,8 +45,7 @@ class TPCHLoader {
                                                number_consumed_tuples_(0),
                                                producing_finished_(false),
                                                bulk_size_(100) {
-    //SetupTableMetadata({"nation", "region", "part", "supplier", "partsupp", "customer", "orders", "lineitem"});
-    SetupTableMetadata({"nation", "region", "part"});
+    SetupTableMetadata({"nation", "region", "part", "supplier", "partsupp", "customer", "orders", "lineitem"});
     number_consumer_threads_ = std::thread::hardware_concurrency();
 
     insert_queue_.set_capacity(number_consumer_threads_);
