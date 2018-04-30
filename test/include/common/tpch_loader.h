@@ -84,11 +84,19 @@ class TPCHLoader {
     }
   }
 
+  void VerifyInserts() {
+    for (auto &table : tables_) {
+      LOG_INFO("Verify table '%s': %lu/%lu tuples", table.name.c_str(), table.data_table->GetTupleCount(), table.number_tuples);
+      EXPECT_EQ(table.data_table->GetTupleCount(), table.number_tuples);
+    }
+  }
+
  private:
   struct Table {
     std::string name;
     storage::DataTable *data_table;
     std::vector<TypeId> types;
+    size_t number_tuples;
   };
 
  private:
@@ -111,9 +119,10 @@ class TPCHLoader {
       }
 
       std::string in_path = data_path_ + table_name + ".tbl";
-      number_input_tuples_ += GetNumberLines(in_path);
+      size_t number_tuples = GetNumberLines(in_path);
+      number_input_tuples_ += number_tuples;
 
-      tables_.push_back({table_name, table, types});
+      tables_.push_back({table_name, table, types, number_tuples});
     }
 
     txn_manager.CommitTransaction(txn);
