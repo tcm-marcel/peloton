@@ -27,6 +27,8 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
 #endif
   }
 
+  const size_t runs_ = 10;
+
  public:
   void CreateTables() {
     auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
@@ -122,44 +124,6 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     ASSERT_EQ(result, ResultType::SUCCESS);
   }
 
-  class LoadBar {
-   public:
-    LoadBar(InterpreterBenchmark &test, std::vector<std::string> files) : i_(0) {
-      sum_ = 0;
-      for (auto &f : files)
-        sum_ += GetNumberLines(test.data_path_ + f + ".tbl");
-
-      LOG_INFO("%lu tuples will be loaded", sum_);
-    }
-
-    void DumpPercentage() {
-      LOG_INFO("  %lu%% ...", (size_t) (i_ * 100 / sum_));
-    }
-
-    size_t GetNumberLines(std::string f) const {
-      std::ifstream in(f);
-
-      // new lines will be skipped unless we stop it from happening:
-      in.unsetf(std::ios_base::skipws);
-
-      // count the newlines with an algorithm specialized for counting:
-      size_t line_count = std::count(
-          std::istream_iterator<char>(in),
-          std::istream_iterator<char>(),
-          '\n');
-
-      return line_count;
-    }
-
-    size_t sum_;
-    size_t i_;
-  };
-
-  void LoadData() {
-    TPCHLoader loader(*this);
-    loader.Load();
-  }
-
   void DropTables() {
     // free the database just created
     auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
@@ -168,79 +132,52 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     txn_manager.CommitTransaction(txn);
   }
 
-  void DoForAllExecutionMethods(std::string section, std::function<void ()> func) {
+  void DoForAllExecutionMethods(UNUSED_ATTRIBUTE std::string section, size_t times, std::function<void ()> func) {
     Benchmark::active_ = true;
 
-    Benchmark::execution_method_ = Benchmark::ExecutionMethod::PlanInterpreter;
-    auto b1 = BENCHMARK(0, section, "plan interpreter");
-    b1.Start();
-    func();
-    b1.Stop();
+    {
+      Benchmark::execution_method_ =
+          Benchmark::ExecutionMethod::PlanInterpreter;
+      auto &b = BENCHMARK(0, section, "plan interpreter");
+      for (size_t i = 0; i < times; i++) {
+        b.Start();
+        func();
+        b.Stop();
+      }
 
-    Benchmark::execution_method_ = Benchmark::ExecutionMethod::LLVMNative;
-    auto b2 = BENCHMARK(0, section, "llvm native");
-    b2.Start();
-    func();
-    b2.Stop();
+      Benchmark::ResetAll();
+    }
 
-    Benchmark::execution_method_ = Benchmark::ExecutionMethod::LLVMInterpreter;
-    auto b3 = BENCHMARK(0, section, "llvm interpreter");
-    b3.Start();
-    func();
-    b3.Stop();
+    {
+      Benchmark::execution_method_ =
+          Benchmark::ExecutionMethod::LLVMNative;
+      auto &b = BENCHMARK(0, section, "llvm native");
+      for (size_t i = 0; i < times; i++) {
+        b.Start();
+        func();
+        b.Stop();
+      }
+
+      Benchmark::ResetAll();
+    }
+
+    {
+      Benchmark::execution_method_ =
+          Benchmark::ExecutionMethod::LLVMInterpreter;
+      auto &b = BENCHMARK(0, section, "llvm interpreter");
+      for (size_t i = 0; i < times; i++) {
+        b.Start();
+        func();
+        b.Stop();
+      }
+
+      Benchmark::ResetAll();
+    }
 
     Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
     Benchmark::active_ = false;
   }
 
-  /*
-  void LoadDataFromFile(std::string table, LoadBar &b, std::vector<bool> columns) {
-    std::string in_path = data_path_ + table + ".tbl";
-    LOG_INFO("Loading from file: %s", in_path.c_str());
-
-    std::ifstream file_in(in_path);
-    std::string line;
-    uint64_t i = 0;
-
-    if (!file_in.is_open())
-      std::perror("Error opening data file");
-
-    while(std::getline(file_in, line)) {
-      if (i % 1000 == 0) {
-        b.DumpPercentage();
-      }
-      std::istringstream line_in(line);
-      std::string sql = "INSERT INTO " + table + " VALUES (";
-
-      for (unsigned int j = 0; j < columns.size(); j++) {
-        std::string cell;
-        std::getline(line_in, cell, '|');
-
-        if (columns[j])
-          sql += "'" + cell + "'";
-        else
-          sql += cell;
-
-        if (j < columns.size() - 1)
-          sql += ", ";
-      }
-
-      sql += ");";
-
-      auto result = TestingSQLUtil::ExecuteSQLQuery(sql);
-      ASSERT_EQ(result, ResultType::SUCCESS);
-
-      i++;
-      b.i_++;
-    }
-
-    if (file_in.bad())
-      std::perror("Error reading data file");
-  };
-   */
-
-  // configuration
-  const std::string data_path_ = "/home/marcel/dev/peloton/tpch-dbgen/data/";
 };
 
 TEST_F(InterpreterBenchmark, CreateTables) {
@@ -250,12 +187,16 @@ TEST_F(InterpreterBenchmark, CreateTables) {
 
 TEST_F(InterpreterBenchmark, LoadData) {
   Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
-  LoadData();
+  TPCHLoader loader(*this);
+  loader.Load();
+  loader.VerifyInserts();
 }
 
+// TODO:
+// cache flushing
 
 TEST_F(InterpreterBenchmark, Q1) {
-  DoForAllExecutionMethods("TPC-H Q1", [] () {
+  DoForAllExecutionMethods("TPC-H Q1", runs_, [] () {
     auto result = TestingSQLUtil::ExecuteSQLQuery(
         "select "
         "l_returnflag, "
@@ -274,10 +215,11 @@ TEST_F(InterpreterBenchmark, Q1) {
         "  l_shipdate <= date '1998-12-01' "
         "group by "
         "l_returnflag, "
-        "l_linestatus; "
+        "l_linestatus; ",
         //"order by "
         //"l_returnflag, "
         //"l_linestatus; "
+        IsolationLevelType::READ_ONLY
     );
 
     ASSERT_EQ(result, ResultType::SUCCESS);
@@ -286,7 +228,7 @@ TEST_F(InterpreterBenchmark, Q1) {
 
 
 TEST_F(InterpreterBenchmark, Q3) {
-  DoForAllExecutionMethods("TPC-H Q3", [] () {
+  DoForAllExecutionMethods("TPC-H Q3", runs_, [] () {
     auto result = TestingSQLUtil::ExecuteSQLQuery(
         "select "
         "l_orderkey, "
@@ -306,10 +248,11 @@ TEST_F(InterpreterBenchmark, Q3) {
         "group by "
         "l_orderkey, "
         "o_orderdate, "
-        "o_shippriority;"
+        "o_shippriority;",
 //        "order by "
 //        "sum(l_extendedprice * (1 - l_discount)) desc, "
 //        "o_orderdate; "
+        IsolationLevelType::READ_ONLY
     );
 
     ASSERT_EQ(result, ResultType::SUCCESS);
@@ -317,7 +260,7 @@ TEST_F(InterpreterBenchmark, Q3) {
 }
 
 TEST_F(InterpreterBenchmark, Q5) {
-  DoForAllExecutionMethods("TPC-H Q5", [] () {
+  DoForAllExecutionMethods("TPC-H Q5", runs_, [] () {
     auto result = TestingSQLUtil::ExecuteSQLQuery(
         "select "
         "n_name, "
@@ -340,9 +283,30 @@ TEST_F(InterpreterBenchmark, Q5) {
         "and o_orderdate >= date '1997-01-01' "
         "and o_orderdate < date '1998-01-01' "
         "group by "
-        "n_name; "
+        "n_name; ",
 //        "order by"
 //        "sum(l_extendedprice * (1 - l_discount)) desc;"
+        IsolationLevelType::READ_ONLY
+    );
+
+    ASSERT_EQ(result, ResultType::SUCCESS);
+  });
+}
+
+TEST_F(InterpreterBenchmark, Q6) {
+  DoForAllExecutionMethods("TPC-H Q6", runs_, [] () {
+    auto result = TestingSQLUtil::ExecuteSQLQuery(
+        "select "
+        "sum(l_extendedprice * l_discount) as revenue "
+        "from "
+        "lineitem "
+        "where "
+        "l_shipdate >= date '1997-01-01' "
+        "and l_shipdate < date '1998-01-01' "
+        "and l_discount >= (0.07 - 0.01)  "
+        "and l_discount <= (0.07 + 0.01) "
+        "and l_quantity < 24;",
+        IsolationLevelType::READ_ONLY
     );
 
     ASSERT_EQ(result, ResultType::SUCCESS);

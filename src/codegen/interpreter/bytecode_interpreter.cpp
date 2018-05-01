@@ -66,8 +66,8 @@ NEVER_INLINE NO_CLONE void BytecodeInterpreter::ExecuteFunction(
 #include "codegen/interpreter/bytecode_instructions.def"
   }
 
-  auto b_setup = BENCHMARK(2, "interpreter setup", bytecode_function_.function_name_);
-  auto b_execution = BENCHMARK(2, "interpreter dispatch area", bytecode_function_.function_name_);
+  auto &b_setup = BENCHMARK(2, "interpreter setup", bytecode_function_.function_name_);
+  auto &b_execution = BENCHMARK(2, "interpreter dispatch area", bytecode_function_.function_name_);
 
   b_setup.Start();
 

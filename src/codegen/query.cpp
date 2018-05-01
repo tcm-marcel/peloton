@@ -52,7 +52,7 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   func_args->query_parameters = &executor_context->GetParams();
   func_args->consumer_arg = consumer.GetConsumerState();
 
-  auto b_execute = BENCHMARK(1, "query execute", std::to_string(code_context_.GetID()));
+  auto &b_execute = BENCHMARK(1, "query execute", ""); // std::to_string(code_context_.GetID()
   b_execute.Start();
 
   if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreter)
@@ -97,7 +97,7 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
   // TODO(marcel): add switch to enable/disable optimization
   // TODO(marcel): add timer to measure time used for optimization (see
   // RuntimeStats)
-  auto b_optimize = BENCHMARK(1, "query llvm optimize", std::to_string(code_context_.GetID()));
+  auto &b_optimize = BENCHMARK(1, "query llvm optimize", ""); // std::to_string(code_context_.GetID()
   b_optimize.Start();
   code_context_.Optimize();
   b_optimize.Stop();
@@ -112,7 +112,7 @@ void Query::Compile(CompileStats *stats) {
     timer.Start();
   }
 
-  auto b_compile = BENCHMARK(1, "query llvm compile", std::to_string(code_context_.GetID()));
+  auto &b_compile = BENCHMARK(1, "query llvm compile", ""); // std::to_string(code_context_.GetID()
   b_compile.Start();
 
   // Compile all functions in context

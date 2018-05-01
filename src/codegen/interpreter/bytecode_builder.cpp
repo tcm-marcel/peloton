@@ -37,8 +37,8 @@ BytecodeFunction BytecodeBuilder::CreateBytecodeFunction(
     bool use_naive_register_allocator) {
   BytecodeBuilder builder(code_context, function);
 
-  auto b_analyse = BENCHMARK(2, "bytecode builder analyse", builder.bytecode_function_.function_name_);
-  auto b_translate = BENCHMARK(2, "bytecode builder translate", builder.bytecode_function_.function_name_);
+  auto &b_analyse = BENCHMARK(2, "bytecode builder analyse", builder.bytecode_function_.function_name_);
+  auto &b_translate = BENCHMARK(2, "bytecode builder translate", builder.bytecode_function_.function_name_);
 
   b_analyse.Start();
   builder.AnalyseFunction();

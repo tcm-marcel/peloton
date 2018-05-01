@@ -160,7 +160,8 @@ class TPCHLoader {
         RunInsertPlan(std::move(plan));
 
         number_consumed_tuples_ += bulk_size_;
-        LOG_INFO("%d%%", static_cast<int>(number_consumed_tuples_ * 100 / number_input_tuples_));
+        if (static_cast<int>(number_consumed_tuples_ * 100 / number_input_tuples_) > static_cast<int>((number_consumed_tuples_ - bulk_size_) * 100 / number_input_tuples_))
+          LOG_INFO("%d%%", static_cast<int>(number_consumed_tuples_ * 100 / number_input_tuples_));
       }
     } catch (tbb::user_abort exception) {
       return;

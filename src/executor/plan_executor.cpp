@@ -62,7 +62,10 @@ static void CompileAndExecutePlan(
   codegen::QueryCompiler compiler;
   auto compiled_query = compiler.Compile(
       *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
-  compiled_query->Compile();
+
+  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative)
+    compiled_query->Compile();
+
   codegen::Query *query = compiled_query.get();
   codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
   //}

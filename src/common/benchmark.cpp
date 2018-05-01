@@ -20,5 +20,8 @@ PCMInit PCMInit::pcm_init_;
 
 bool Benchmark::active_ = false;
 Benchmark::ExecutionMethod Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
+std::unordered_map<std::string, Benchmark> Benchmark::instances_;
+
+BenchmarkDummy BenchmarkDummy::instance_;
 
 }  // namespace peloton
