@@ -56,23 +56,11 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
 
   if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreter)
     ExecuteInterpreter(func_args, stats);
-  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative) {
+  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative ||
+      Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
     ExecuteNative(func_args, stats);
-  } else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
-    if (is_compiled_) {
-      ExecuteNative(func_args, stats);
-    } else {
-      try {
-        ExecuteInterpreter(func_args, stats);
-      } catch (interpreter::NotSupportedException e) {
-        LOG_ERROR("query not supported by interpreter: %s", e.what());
-
-        executor::ExecutionResult result;
-        result.m_result = ResultType::INVALID;
-        on_complete(result);
-        return;
-      }
-    }
+  } else {
+    PELOTON_ASSERT(false);
   }
 
   Benchmark::Stop(1, "query execute");
