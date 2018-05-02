@@ -25,6 +25,8 @@
 #include "expression/tuple_value_expression.h"
 #include "storage/table_factory.h"
 
+#include "common/benchmark.h"
+
 namespace peloton {
 namespace test {
 
@@ -204,11 +206,16 @@ PelotonCodeGenTest::CodeGenStats PelotonCodeGenTest::CompileAndExecute(
 
   // Compile the query.
   CodeGenStats stats;
+
+  Benchmark::Start(1, "codegen");
+
   auto compiled_query = codegen::QueryCompiler().Compile(
       plan, parameters.GetQueryParametersMap(), consumer, &stats.compile_stats);
 
+  Benchmark::Stop(1, "codegen");
+
   // Execute the query.
-  compiled_query->Compile();
+  //compiled_query->Compile();
   stats.runtime_stats = ExecuteSync(
       *compiled_query,
       std::unique_ptr<executor::ExecutorContext>(

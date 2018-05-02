@@ -132,17 +132,29 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     txn_manager.CommitTransaction(txn);
   }
 
-  void DoForAllExecutionMethods(UNUSED_ATTRIBUTE std::string section, size_t times, std::function<void ()> func) {
-    Benchmark::active_ = true;
+  void DoForAllBenchmarkLevels(std::function<void ()> func) {
+    Benchmark::run_level_ = 0;
+    func();
+
+    Benchmark::run_level_ = 1;
+    func();
+
+    Benchmark::run_level_ = 2;
+    func();
+  }
+
+  void DoForAllExecutionMethods(size_t times, std::function<void ()> func) {
+    // Activate benchmarking
+    Benchmark::Activate(0);
+    Benchmark::Activate(1);
 
     {
       Benchmark::execution_method_ =
           Benchmark::ExecutionMethod::PlanInterpreter;
-      auto &b = BENCHMARK(0, section, "plan interpreter");
       for (size_t i = 0; i < times; i++) {
-        b.Start();
+        Benchmark::Start(0, "plan interpreter");
         func();
-        b.Stop();
+        Benchmark::Stop(0, "plan interpreter");
       }
 
       Benchmark::ResetAll();
@@ -151,11 +163,10 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     {
       Benchmark::execution_method_ =
           Benchmark::ExecutionMethod::LLVMNative;
-      auto &b = BENCHMARK(0, section, "llvm native");
       for (size_t i = 0; i < times; i++) {
-        b.Start();
+        Benchmark::Start(0, "llvm native");
         func();
-        b.Stop();
+        Benchmark::Stop(0, "llvm native");
       }
 
       Benchmark::ResetAll();
@@ -164,18 +175,19 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     {
       Benchmark::execution_method_ =
           Benchmark::ExecutionMethod::LLVMInterpreter;
-      auto &b = BENCHMARK(0, section, "llvm interpreter");
       for (size_t i = 0; i < times; i++) {
-        b.Start();
+        Benchmark::Start(0, "llvm interpreter");
         func();
-        b.Stop();
+        Benchmark::Stop(0, "llvm interpreter");
       }
 
       Benchmark::ResetAll();
     }
 
+    // Reset state
     Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
-    Benchmark::active_ = false;
+    Benchmark::Deactivate(1);
+    Benchmark::Deactivate(0);
   }
 
 };
@@ -195,121 +207,142 @@ TEST_F(InterpreterBenchmark, LoadData) {
 // TODO:
 // cache flushing
 
-TEST_F(InterpreterBenchmark, Q1) {
-  DoForAllExecutionMethods("TPC-H Q1", runs_, [] () {
-    auto result = TestingSQLUtil::ExecuteSQLQuery(
-        "select "
-        "l_returnflag, "
-        "l_linestatus, "
-        "sum(l_quantity) as sum_qty, "
-        "sum(l_extendedprice) as sum_base_price, "
-        "sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, "
-        "sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, "
-        "avg(l_quantity) as avg_qty, "
-        "avg(l_extendedprice) as avg_price, "
-        "avg(l_discount) as avg_disc, "
-        "count(*) as count_order "
-        "from "
-        "lineitem "
-        "where "
-        "  l_shipdate <= date '1998-12-01' "
-        "group by "
-        "l_returnflag, "
-        "l_linestatus; ",
-        //"order by "
-        //"l_returnflag, "
-        //"l_linestatus; "
-        IsolationLevelType::READ_ONLY
-    );
+TEST_F(InterpreterBenchmark, SelectStar) {
+  DoForAllBenchmarkLevels([&] () {
+    DoForAllExecutionMethods(runs_, [&]() {
+      auto result = TestingSQLUtil::ExecuteSQLQuery(
+          "select * from lineitem",
+          IsolationLevelType::READ_ONLY
+      );
 
-    ASSERT_EQ(result, ResultType::SUCCESS);
+      ASSERT_EQ(result, ResultType::SUCCESS);
+    });
+  });
+}
+
+TEST_F(InterpreterBenchmark, Q1) {
+  DoForAllBenchmarkLevels([&] () {
+    DoForAllExecutionMethods(runs_, [&]() {
+      auto result = TestingSQLUtil::ExecuteSQLQuery(
+          "select "
+          "l_returnflag, "
+          "l_linestatus, "
+          "sum(l_quantity) as sum_qty, "
+          "sum(l_extendedprice) as sum_base_price, "
+          "sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, "
+          "sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, "
+          "avg(l_quantity) as avg_qty, "
+          "avg(l_extendedprice) as avg_price, "
+          "avg(l_discount) as avg_disc, "
+          "count(*) as count_order "
+          "from "
+          "lineitem "
+          "where "
+          "  l_shipdate <= date '1998-12-01' "
+          "group by "
+          "l_returnflag, "
+          "l_linestatus; ",
+          //"order by "
+          //"l_returnflag, "
+          //"l_linestatus; "
+          IsolationLevelType::READ_ONLY
+      );
+
+      ASSERT_EQ(result, ResultType::SUCCESS);
+    });
   });
 }
 
 
 TEST_F(InterpreterBenchmark, Q3) {
-  DoForAllExecutionMethods("TPC-H Q3", runs_, [] () {
-    auto result = TestingSQLUtil::ExecuteSQLQuery(
-        "select "
-        "l_orderkey, "
-        "sum(l_extendedprice * (1 - l_discount)) as revenue, "
-        "o_orderdate, "
-        "o_shippriority "
-        "from "
-        "customer, "
-        "orders, "
-        "lineitem "
-        "where "
-        "c_mktsegment = 'MACHINERY' "
-        "and c_custkey = o_custkey "
-        "and l_orderkey = o_orderkey "
-        "and o_orderdate < date '1995-03-10' "
-        "and l_shipdate > date '1995-03-10' "
-        "group by "
-        "l_orderkey, "
-        "o_orderdate, "
-        "o_shippriority;",
+  DoForAllBenchmarkLevels([&] () {
+    DoForAllExecutionMethods(runs_, [&]() {
+      auto result = TestingSQLUtil::ExecuteSQLQuery(
+          "select "
+          "l_orderkey, "
+          "sum(l_extendedprice * (1 - l_discount)) as revenue, "
+          "o_orderdate, "
+          "o_shippriority "
+          "from "
+          "customer, "
+          "orders, "
+          "lineitem "
+          "where "
+          "c_mktsegment = 'MACHINERY' "
+          "and c_custkey = o_custkey "
+          "and l_orderkey = o_orderkey "
+          "and o_orderdate < date '1995-03-10' "
+          "and l_shipdate > date '1995-03-10' "
+          "group by "
+          "l_orderkey, "
+          "o_orderdate, "
+          "o_shippriority;",
 //        "order by "
 //        "sum(l_extendedprice * (1 - l_discount)) desc, "
 //        "o_orderdate; "
-        IsolationLevelType::READ_ONLY
-    );
+          IsolationLevelType::READ_ONLY
+      );
 
-    ASSERT_EQ(result, ResultType::SUCCESS);
+      ASSERT_EQ(result, ResultType::SUCCESS);
+    });
   });
 }
 
 TEST_F(InterpreterBenchmark, Q5) {
-  DoForAllExecutionMethods("TPC-H Q5", runs_, [] () {
-    auto result = TestingSQLUtil::ExecuteSQLQuery(
-        "select "
-        "n_name, "
-        "sum(l_extendedprice * (1 - l_discount)) as revenue "
-        "from "
-        "customer, "
-        "orders, "
-        "lineitem, "
-        "supplier, "
-        "nation, "
-        "region "
-        "where "
-        "c_custkey = o_custkey "
-        "and l_orderkey = o_orderkey "
-        "and l_suppkey = s_suppkey "
-        "and c_nationkey = s_nationkey "
-        "and s_nationkey = n_nationkey "
-        "and n_regionkey = r_regionkey "
-        "and r_name = 'AFRICA' "
-        "and o_orderdate >= date '1997-01-01' "
-        "and o_orderdate < date '1998-01-01' "
-        "group by "
-        "n_name; ",
+  DoForAllBenchmarkLevels([&] () {
+    DoForAllExecutionMethods(runs_, [&]() {
+      auto result = TestingSQLUtil::ExecuteSQLQuery(
+          "select "
+          "n_name, "
+          "sum(l_extendedprice * (1 - l_discount)) as revenue "
+          "from "
+          "customer, "
+          "orders, "
+          "lineitem, "
+          "supplier, "
+          "nation, "
+          "region "
+          "where "
+          "c_custkey = o_custkey "
+          "and l_orderkey = o_orderkey "
+          "and l_suppkey = s_suppkey "
+          "and c_nationkey = s_nationkey "
+          "and s_nationkey = n_nationkey "
+          "and n_regionkey = r_regionkey "
+          "and r_name = 'AFRICA' "
+          "and o_orderdate >= date '1997-01-01' "
+          "and o_orderdate < date '1998-01-01' "
+          "group by "
+          "n_name; ",
 //        "order by"
 //        "sum(l_extendedprice * (1 - l_discount)) desc;"
-        IsolationLevelType::READ_ONLY
-    );
+          IsolationLevelType::READ_ONLY
+      );
 
-    ASSERT_EQ(result, ResultType::SUCCESS);
+      ASSERT_EQ(result, ResultType::SUCCESS);
+    });
   });
 }
 
 TEST_F(InterpreterBenchmark, Q6) {
-  DoForAllExecutionMethods("TPC-H Q6", runs_, [] () {
-    auto result = TestingSQLUtil::ExecuteSQLQuery(
-        "select "
-        "sum(l_extendedprice * l_discount) as revenue "
-        "from "
-        "lineitem "
-        "where "
-        "l_shipdate >= date '1997-01-01' "
-        "and l_shipdate < date '1998-01-01' "
-        "and l_discount >= (0.07 - 0.01)  "
-        "and l_discount <= (0.07 + 0.01) "
-        "and l_quantity < 24;",
-        IsolationLevelType::READ_ONLY
-    );
+  DoForAllBenchmarkLevels([&] () {
+    DoForAllExecutionMethods(runs_, [&]() {
+      auto result = TestingSQLUtil::ExecuteSQLQuery(
+          "select "
+          "sum(l_extendedprice * l_discount) as revenue "
+          "from "
+          "lineitem "
+          "where "
+          "l_shipdate >= date '1997-01-01' "
+          "and l_shipdate < date '1998-01-01' "
+          "and l_discount >= (0.07 - 0.01)  "
+          "and l_discount <= (0.07 + 0.01) "
+          "and l_quantity < 24;",
+          IsolationLevelType::READ_ONLY
+      );
 
-    ASSERT_EQ(result, ResultType::SUCCESS);
+      ASSERT_EQ(result, ResultType::SUCCESS);
+    });
   });
 }
 

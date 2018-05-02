@@ -37,21 +37,18 @@ BytecodeFunction BytecodeBuilder::CreateBytecodeFunction(
     bool use_naive_register_allocator) {
   BytecodeBuilder builder(code_context, function);
 
-  auto &b_analyse = BENCHMARK(2, "bytecode builder analyse", builder.bytecode_function_.function_name_);
-  auto &b_translate = BENCHMARK(2, "bytecode builder translate", builder.bytecode_function_.function_name_);
-
-  b_analyse.Start();
+  Benchmark::Start(2, "bytecode builder analyse");
   builder.AnalyseFunction();
-  b_analyse.Stop();
+  Benchmark::Stop(2, "bytecode builder analyse");
 
   if (use_naive_register_allocator)
     builder.PerformNaiveRegisterAllocation();
   else
     builder.PerformGreedyRegisterAllocation();
 
-  b_translate.Start();
+  Benchmark::Start(2, "bytecode builder translate");
   builder.TranslateFunction();
-  b_translate.Stop();
+  Benchmark::Stop(2, "bytecode builder translate");
   builder.Finalize();
 
   return std::move(builder.bytecode_function_);

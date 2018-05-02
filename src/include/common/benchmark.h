@@ -29,74 +29,58 @@
 #include "common/timer.h"
 
 
-#define BENCHMARK(level, s, a) BENCHMARK_##level(s, a)
-
-#if (BENCHMARK_LEVEL == 0)
-#define BENCHMARK_0(s, a) Benchmark::Get(s, a)
-#else
-#define BENCHMARK_0(s, a) BenchmarkDummy::instance_
-#endif
-
-#if (BENCHMARK_LEVEL == 1)
-#define BENCHMARK_1(s, a) Benchmark::Get(s, a)
-#else
-#define BENCHMARK_1(s, a) BenchmarkDummy::instance_
-#endif
-
-#if (BENCHMARK_LEVEL == 2)
-#define BENCHMARK_2(s, a) Benchmark::Get(s, a)
-#else
-#define BENCHMARK_2(s, a) BenchmarkDummy::instance_
-#endif
-
 namespace peloton {
 
 class Benchmark {
  public:
   Benchmark() {}
 
-  static ALWAYS_INLINE inline Benchmark &Get(std::string section, std::string activation) {
+  static ALWAYS_INLINE inline Benchmark &Get(unsigned int level, std::string section) {
 
-    auto &b = instances_[section + activation];
+    auto &b = instances_[section];
 
+    b.instance_level_= level;
     b.section_ = section;
-    b.activation_ = activation;
 
     return b;
   }
 
-  ALWAYS_INLINE inline void Start() {
-    if (!active_) return;
+  static ALWAYS_INLINE inline void Start(unsigned int level, std::string section) {
+    if (!active_ || run_level_ != level) return;
+
+    auto &b = Get(level, section);
 
     if (use_timer_) {
-      timer_.Reset();
-      timer_.Start();
+      b.timer_.Reset();
+      b.timer_.Start();
     }
 
     if (use_pcm_)
-      states_.first = getSystemCounterState();
+      b.states_.first = getSystemCounterState();
   }
 
-  ALWAYS_INLINE inline void Stop() {
-    if (!active_) return;
+  static ALWAYS_INLINE inline void Stop(unsigned int level, std::string section) {
+    if (!active_ || run_level_ != level) return;
+
+    auto &b = Get(level, section);
 
     if (use_timer_) {
-      timer_.Stop();
-      parameters_["Duration"].push_back(timer_.GetDuration());
+      b.timer_.Stop();
+      b.parameters_["Duration"].push_back(b.timer_.GetDuration());
     }
 
     if (use_pcm_) {
-      states_.second = getSystemCounterState();
-      parameters_["InstructionsPerClock"].push_back(getIPC(states_.first, states_.second));
-      parameters_["L2CacheHitRatio"].push_back(getL2CacheHitRatio(states_.first, states_.second));
-      parameters_["L3CacheHitRatio"].push_back(getL3CacheHitRatio(states_.first, states_.second));
+      b.states_.second = getSystemCounterState();
+      b.parameters_["InstructionsPerClock"].push_back(getIPC(b.states_.first, b.states_.second));
+      b.parameters_["L2CacheHitRatio"].push_back(getL2CacheHitRatio(b.states_.first, b.states_.second));
+      b.parameters_["L3CacheHitRatio"].push_back(getL3CacheHitRatio(b.states_.first, b.states_.second));
     }
 
-    Dump();
+    b.Dump();
   }
 
   void Dump() const {
-    std::cout << ">> " << section_ << " >> " << activation_ << std::endl;
+    std::cout << ">> " << section_ << std::endl;
 
     for (auto pair : parameters_) {
       auto stats = VectorStats(pair.second);
@@ -119,6 +103,16 @@ class Benchmark {
       b.second.Reset();
   }
 
+  static void Activate(unsigned int level) {
+    if (run_level_ == level)
+      active_ = true;
+  }
+
+  static void Deactivate(unsigned int level) {
+    if (run_level_ == level)
+      active_ = false;
+  }
+
   static std::pair<double, double> VectorStats(std::vector<double> &v) {
     double mean = std::accumulate(v.begin(), v.end(), 0.0) / v.size();
 
@@ -137,14 +131,8 @@ class Benchmark {
 
   // instance data
   std::string section_;
-  std::string activation_;
+  unsigned int instance_level_;
   std::unordered_map<std::string, std::vector<double>> parameters_;
-
-  static std::unordered_map<std::string, Benchmark> instances_;
-
-  // configuration
-  static const bool use_timer_ = BENCHMARK_TIMER;
-  static const bool use_pcm_= BENCHMARK_PCM;
 
  public:
   // peloton execution method
@@ -155,20 +143,17 @@ class Benchmark {
     LLVMInterpreter
   };
 
+  // configuration
+  static const bool use_timer_ = BENCHMARK_TIMER;
+  static const bool use_pcm_= BENCHMARK_PCM;
+
+  static std::unordered_map<std::string, Benchmark> instances_;
   static ExecutionMethod execution_method_;
   static bool active_;
+  static bool run_level_;
 
  private:
   DISALLOW_COPY(Benchmark)
-};
-
-class BenchmarkDummy {
- public:
-  BenchmarkDummy() {}
-  ALWAYS_INLINE inline void Start() {}
-  ALWAYS_INLINE inline void Stop() {}
-
-  static BenchmarkDummy instance_;
 };
 
 #if BENCHMARK_PCM

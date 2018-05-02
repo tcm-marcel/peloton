@@ -52,8 +52,7 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   func_args->query_parameters = &executor_context->GetParams();
   func_args->consumer_arg = consumer.GetConsumerState();
 
-  auto &b_execute = BENCHMARK(1, "query execute", ""); // std::to_string(code_context_.GetID()
-  b_execute.Start();
+  Benchmark::Start(1, "query execute");
 
   if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreter)
     ExecuteInterpreter(func_args, stats);
@@ -76,7 +75,7 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
     }
   }
 
-  b_execute.Stop();
+  Benchmark::Stop(1, "query execute");
 
   executor::ExecutionResult result;
   result.m_result = ResultType::SUCCESS;
@@ -97,10 +96,9 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
   // TODO(marcel): add switch to enable/disable optimization
   // TODO(marcel): add timer to measure time used for optimization (see
   // RuntimeStats)
-  auto &b_optimize = BENCHMARK(1, "query llvm optimize", ""); // std::to_string(code_context_.GetID()
-  b_optimize.Start();
+  Benchmark::Start(1, "llvm optimize");
   code_context_.Optimize();
-  b_optimize.Stop();
+  Benchmark::Stop(1, "llvm optimize");
 
   is_compiled_ = false;
 }
@@ -112,14 +110,13 @@ void Query::Compile(CompileStats *stats) {
     timer.Start();
   }
 
-  auto &b_compile = BENCHMARK(1, "query llvm compile", ""); // std::to_string(code_context_.GetID()
-  b_compile.Start();
+  Benchmark::Start(1, "llvm compile");
 
   // Compile all functions in context
   LOG_TRACE("Starting Query compilation ...");
   code_context_.Compile();
 
-  b_compile.Stop();
+  Benchmark::Stop(1, "llvm compile");
 
   // Get pointers to the JITed functions
   compiled_functions_.init_func =
@@ -151,11 +148,15 @@ void Query::Compile(CompileStats *stats) {
 
 bool Query::ExecuteNative(FunctionArguments *function_arguments,
                           RuntimeStats *stats) {
+  Compile();
+
   // Start timer
   Timer<std::ratio<1, 1000>> timer;
   if (stats != nullptr) {
     timer.Start();
   }
+
+  Benchmark::Start(1, "native execute init");
 
   // Call init
   LOG_TRACE("Calling query's init() ...");
@@ -175,6 +176,9 @@ bool Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  Benchmark::Stop(1, "native execute init");
+  Benchmark::Start(1, "native execute plan");
+
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
@@ -193,6 +197,9 @@ bool Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  Benchmark::Stop(1, "native execute plan");
+  Benchmark::Start(1, "native execute teardown");
+
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
   compiled_functions_.tear_down_func(function_arguments);
@@ -202,6 +209,8 @@ bool Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Stop();
     stats->tear_down_ms = timer.GetDuration();
   }
+
+  Benchmark::Stop(1, "native execute teardown");
 
   return true;
 }
@@ -216,16 +225,30 @@ bool Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  Benchmark::Start(1, "interpreter translate init");
+
   // Create Bytecode
   interpreter::BytecodeFunction init_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, llvm_functions_.init_func);
+
+  Benchmark::Stop(1, "interpreter translate init");
+  Benchmark::Start(1, "interpreter translate plan");
+
+  Benchmark::Activate(2);
   interpreter::BytecodeFunction plan_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, llvm_functions_.plan_func);
+  Benchmark::Deactivate(2);
+
+  Benchmark::Stop(1, "interpreter translate plan");
+  Benchmark::Start(1, "interpreter translate teardown");
+
   interpreter::BytecodeFunction tear_down_bytecode =
       interpreter::BytecodeBuilder::CreateBytecodeFunction(
           code_context_, llvm_functions_.tear_down_func);
+
+  Benchmark::Stop(1, "interpreter translate teardown");
 
   // Time initialization
   if (stats != nullptr) {
@@ -234,6 +257,8 @@ bool Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Reset();
     timer.Start();
   }
+
+  Benchmark::Start(1, "interpreter execute init");
 
   // Call init
   LOG_TRACE("Calling query's init() ...");
@@ -253,11 +278,16 @@ bool Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  Benchmark::Stop(1, "interpreter execute init");
+  Benchmark::Start(1, "interpreter execute plan");
+
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
   try {
+    Benchmark::Activate(2);
     interpreter::BytecodeInterpreter::ExecuteFunction(
         plan_bytecode, reinterpret_cast<char *>(function_arguments));
+    Benchmark::Deactivate(2);
   } catch (...) {
     interpreter::BytecodeInterpreter::ExecuteFunction(
         tear_down_bytecode, reinterpret_cast<char *>(function_arguments));
@@ -272,6 +302,9 @@ bool Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  Benchmark::Stop(1, "interpreter execute plan");
+  Benchmark::Start(1, "interpreter execute teardown");
+
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
   interpreter::BytecodeInterpreter::ExecuteFunction(
@@ -282,6 +315,8 @@ bool Query::ExecuteInterpreter(FunctionArguments *function_arguments,
     timer.Stop();
     stats->tear_down_ms = timer.GetDuration();
   }
+
+  Benchmark::Stop(1, "interpreter execute teardown");
 
   // TODO(marcel): return value
   return true;
