@@ -57,8 +57,6 @@ static void CompileAndExecutePlan(
 
   // Compile the query
 
-  codegen::Query *query;
-
 //  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
 //    query = codegen::QueryCache::Instance().Find(plan);
 //    if (query == nullptr) {
@@ -75,10 +73,7 @@ static void CompileAndExecutePlan(
     auto compiled_query = compiler.Compile(
         *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
 
-    if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative)
-      compiled_query->Compile();
-
-    query = compiled_query.get();
+  codegen::Query *query; = compiled_query.get();
 //  }
 
   auto on_query_result = [&on_complete, &consumer,
