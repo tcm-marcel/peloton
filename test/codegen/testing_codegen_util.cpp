@@ -249,7 +249,7 @@ PelotonCodeGenTest::CodeGenStats PelotonCodeGenTest::CompileAndExecuteCache(
     auto compiled_query = compiler.Compile(
         *plan, executor_context->GetParams().GetQueryParametersMap(), consumer,
         &stats.compile_stats);
-    compiled_query->Compile();
+    //compiled_query->Compile();
     query = compiled_query.get();
     codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
   }

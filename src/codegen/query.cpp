@@ -52,18 +52,16 @@ void Query::Execute(std::unique_ptr<executor::ExecutorContext> executor_context,
   func_args->query_parameters = &executor_context->GetParams();
   func_args->consumer_arg = consumer.GetConsumerState();
 
-  Benchmark::Start(1, "query execute");
-
   if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreter)
     ExecuteInterpreter(func_args, stats);
-  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative ||
-      Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
+  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative) {
+    Compile();
+    ExecuteNative(func_args, stats);
+  } else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
     ExecuteNative(func_args, stats);
   } else {
     PELOTON_ASSERT(false);
   }
-
-  Benchmark::Stop(1, "query execute");
 
   executor::ExecutionResult result;
   result.m_result = ResultType::SUCCESS;
@@ -78,7 +76,9 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
   // will also be done by Optimize() or Compile() if not done before,
   // but we do not want to mix up the timings, so do it here
 
+  Benchmark::Start(1, "llvm verify");
   code_context_.Verify();
+  Benchmark::Stop(1, "llvm verify");
 
   // optimize the functions
   // TODO(marcel): add switch to enable/disable optimization
@@ -136,8 +136,6 @@ void Query::Compile(CompileStats *stats) {
 
 bool Query::ExecuteNative(FunctionArguments *function_arguments,
                           RuntimeStats *stats) {
-  Compile();
-
   // Start timer
   Timer<std::ratio<1, 1000>> timer;
   if (stats != nullptr) {
