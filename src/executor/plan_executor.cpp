@@ -73,7 +73,7 @@ static void CompileAndExecutePlan(
     auto compiled_query = compiler.Compile(
         *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
 
-  codegen::Query *query; = compiled_query.get();
+  codegen::Query *query = compiled_query.get();
 //  }
 
   auto on_query_result = [&on_complete, &consumer,
