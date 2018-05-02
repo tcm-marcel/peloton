@@ -60,7 +60,7 @@ static void CompileAndExecutePlan(
   codegen::Query *query;
 
   if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
-    codegen::Query *query = codegen::QueryCache::Instance().Find(plan);
+    query = codegen::QueryCache::Instance().Find(plan);
     if (query == nullptr) {
       codegen::QueryCompiler compiler;
       auto compiled_query = compiler.Compile(
