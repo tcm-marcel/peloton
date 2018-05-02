@@ -59,18 +59,18 @@ static void CompileAndExecutePlan(
 
   codegen::Query *query;
 
-  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
-    query = codegen::QueryCache::Instance().Find(plan);
-    if (query == nullptr) {
-      codegen::QueryCompiler compiler;
-      auto compiled_query = compiler.Compile(
-          *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
-      compiled_query->Compile();
-
-      query = compiled_query.get();
-      codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
-    }
-  } else {
+//  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
+//    query = codegen::QueryCache::Instance().Find(plan);
+//    if (query == nullptr) {
+//      codegen::QueryCompiler compiler;
+//      auto compiled_query = compiler.Compile(
+//          *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
+//      compiled_query->Compile();
+//
+//      query = compiled_query.get();
+//      codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
+//    }
+//  } else {
     codegen::QueryCompiler compiler;
     auto compiled_query = compiler.Compile(
         *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
@@ -79,7 +79,7 @@ static void CompileAndExecutePlan(
       compiled_query->Compile();
 
     query = compiled_query.get();
-  }
+//  }
 
   auto on_query_result = [&on_complete, &consumer,
                           plan](executor::ExecutionResult result) {
