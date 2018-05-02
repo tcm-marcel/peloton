@@ -80,7 +80,7 @@ class Benchmark {
   }
 
   void Dump() const {
-    std::cout << ">> " << section_ << std::endl;
+    std::cout << ">> (" << instance_level_ << ") " << section_ << std::endl;
 
     for (auto pair : parameters_) {
       auto stats = VectorStats(pair.second);
