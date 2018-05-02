@@ -142,6 +142,9 @@ bool Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Start();
   }
 
+  if (!is_compiled_)
+    Compile();
+
   Benchmark::Start(1, "native execute init");
 
   // Call init
