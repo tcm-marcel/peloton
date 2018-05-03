@@ -69,11 +69,17 @@ static void CompileAndExecutePlan(
 //      codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
 //    }
 //  } else {
+
+    Benchmark::Start(1, "llvm codegen");
+
     codegen::QueryCompiler compiler;
     auto compiled_query = compiler.Compile(
         *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
 
-  codegen::Query *query = compiled_query.get();
+    codegen::Query *query = compiled_query.get();
+
+    Benchmark::Stop(1, "llvm codegen");
+
 //  }
 
   auto on_query_result = [&on_complete, &consumer,

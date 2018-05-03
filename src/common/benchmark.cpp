@@ -18,6 +18,7 @@ namespace peloton {
 PCMInit PCMInit::pcm_init_;
 #endif
 
+std::string Benchmark::test_case_;
 bool Benchmark::active_ = false;
 bool Benchmark::run_level_ = false;
 Benchmark::ExecutionMethod Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;

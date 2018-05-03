@@ -16,6 +16,10 @@
 #include "sql/testing_sql_util.h"
 #include "common/tpch_loader.h"
 
+#include <iostream>
+#include <fstream>
+#include <sys/stat.h>
+
 namespace peloton {
 namespace test {
 
@@ -25,9 +29,12 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
 #ifndef NDEBUG
     LOG_INFO("Benchmark executed in DEBUG mode!");
 #endif
+
+    Benchmark::test_case_ = std::string(::testing::UnitTest::GetInstance()->current_test_info()->name());
   }
 
   const size_t runs_ = 10;
+  const bool dump_results_ = true;
 
  public:
   void CreateTables() {
@@ -132,18 +139,20 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     txn_manager.CommitTransaction(txn);
   }
 
+  bool FileExists(const std::string& file) {
+    struct stat buf;
+    return (stat(file.c_str(), &buf) == 0);
+  }
+
   void DoForAllBenchmarkLevels(std::function<void ()> func) {
     Benchmark::run_level_ = 0;
     func();
 
     Benchmark::run_level_ = 1;
     func();
-
-    Benchmark::run_level_ = 2;
-    func();
   }
 
-  void DoForAllExecutionMethods(size_t times, std::function<void ()> func) {
+  void DoForAllExecutionMethods(size_t times, std::string query, bool dump_results) {
     // Activate benchmarking
     Benchmark::Activate(0);
     Benchmark::Activate(1);
@@ -153,8 +162,12 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
           Benchmark::ExecutionMethod::PlanInterpreter;
       for (size_t i = 0; i < times; i++) {
         Benchmark::Start(0, "plan interpreter");
-        func();
+        auto result = ExecuteQuery(query);
         Benchmark::Stop(0, "plan interpreter");
+
+        std::string filename = Benchmark::test_case_ + "_plan_interpreter.tbl";
+        if (dump_results && i == 0 && !FileExists(filename))
+          DumpResultToFile(filename, std::move(result));
       }
 
       Benchmark::ResetAll();
@@ -165,8 +178,12 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
           Benchmark::ExecutionMethod::LLVMNative;
       for (size_t i = 0; i < times; i++) {
         Benchmark::Start(0, "llvm native");
-        func();
+        auto result = ExecuteQuery(query);
         Benchmark::Stop(0, "llvm native");
+
+        std::string filename = Benchmark::test_case_ + "_llvm_native.tbl";
+        if (dump_results && i == 0 && !FileExists(filename))
+          DumpResultToFile(filename, std::move(result));
       }
 
       Benchmark::ResetAll();
@@ -177,8 +194,12 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
           Benchmark::ExecutionMethod::LLVMInterpreter;
       for (size_t i = 0; i < times; i++) {
         Benchmark::Start(0, "llvm interpreter");
-        func();
+        auto result = ExecuteQuery(query);
         Benchmark::Stop(0, "llvm interpreter");
+
+        std::string filename = Benchmark::test_case_ + "_llvm_interpreter.tbl";
+        if (dump_results && i == 0 && !FileExists(filename))
+          DumpResultToFile(filename, std::move(result));
       }
 
       Benchmark::ResetAll();
@@ -190,6 +211,40 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     Benchmark::Deactivate(0);
   }
 
+  std::pair<std::vector<ResultValue>, std::vector<FieldInfo>> ExecuteQuery(std::string query) {
+    std::vector<ResultValue> result;
+    std::vector<FieldInfo> tuple_descriptor;
+    std::string error_message;
+    int rows_changed;
+
+    // Execute query
+    TestingSQLUtil::ExecuteSQLQuery(std::move(query), result, tuple_descriptor,
+                                    rows_changed, error_message, IsolationLevelType::READ_ONLY);
+
+    return std::make_pair(std::move(result), std::move(tuple_descriptor));
+  }
+
+  void DumpResultToFile(std::string filename, std::pair<std::vector<ResultValue>, std::vector<FieldInfo>> result) {
+    std::ofstream file;
+    file.open(filename);
+
+    auto &values = result.first;
+    auto &tuple_descriptor = result.second;
+
+    unsigned int number_rows = values.size() / tuple_descriptor.size();
+
+    for (unsigned int i = 0; i < number_rows; i++) {
+      for (unsigned int j = 0; j < tuple_descriptor.size(); j++) {
+        file << TestingSQLUtil::GetResultValueAsString(
+            values, i * tuple_descriptor.size() + j);
+        if (j < tuple_descriptor.size() - 1) {
+          file << "|";
+        }
+      }
+    }
+
+    file.close();
+  }
 };
 
 TEST_F(InterpreterBenchmark, CreateTables) {
@@ -207,142 +262,122 @@ TEST_F(InterpreterBenchmark, LoadData) {
 // TODO:
 // cache flushing
 
-TEST_F(InterpreterBenchmark, SelectStar) {
-  DoForAllBenchmarkLevels([&] () {
-    DoForAllExecutionMethods(runs_, [&]() {
-      auto result = TestingSQLUtil::ExecuteSQLQuery(
-          "select * from lineitem",
-          IsolationLevelType::READ_ONLY
-      );
+TEST_F(InterpreterBenchmark, DISABLED_SelectStar) {
+  std::string query =
+    "select * from lineitem";
 
-      ASSERT_EQ(result, ResultType::SUCCESS);
-    });
+  DoForAllBenchmarkLevels([&]() {
+    DoForAllExecutionMethods(runs_, query, dump_results_);
   });
 }
 
 TEST_F(InterpreterBenchmark, Q1) {
-  DoForAllBenchmarkLevels([&] () {
-    DoForAllExecutionMethods(runs_, [&]() {
-      auto result = TestingSQLUtil::ExecuteSQLQuery(
-          "select "
-          "l_returnflag, "
-          "l_linestatus, "
-          "sum(l_quantity) as sum_qty, "
-          "sum(l_extendedprice) as sum_base_price, "
-          "sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, "
-          "sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, "
-          "avg(l_quantity) as avg_qty, "
-          "avg(l_extendedprice) as avg_price, "
-          "avg(l_discount) as avg_disc, "
-          "count(*) as count_order "
-          "from "
-          "lineitem "
-          "where "
-          "  l_shipdate <= date '1998-12-01' "
-          "group by "
-          "l_returnflag, "
-          "l_linestatus; ",
-          //"order by "
-          //"l_returnflag, "
-          //"l_linestatus; "
-          IsolationLevelType::READ_ONLY
-      );
+  std::string query =
+    "select "
+    "l_returnflag, "
+    "l_linestatus, "
+    "sum(l_quantity) as sum_qty, "
+    "sum(l_extendedprice) as sum_base_price, "
+    "sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, "
+    "sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, "
+    "avg(l_quantity) as avg_qty, "
+    "avg(l_extendedprice) as avg_price, "
+    "avg(l_discount) as avg_disc, "
+    "count(*) as count_order "
+    "from "
+    "lineitem "
+    "where "
+    "  l_shipdate <= date '1998-12-01' "
+    "group by "
+    "l_returnflag, "
+    "l_linestatus; ";
+    //"order by "
+    //"l_returnflag, "
+    //"l_linestatus; "
 
-      ASSERT_EQ(result, ResultType::SUCCESS);
-    });
+  DoForAllBenchmarkLevels([&]() {
+    DoForAllExecutionMethods(runs_, query, dump_results_);
   });
 }
 
 
 TEST_F(InterpreterBenchmark, Q3) {
-  DoForAllBenchmarkLevels([&] () {
-    DoForAllExecutionMethods(runs_, [&]() {
-      auto result = TestingSQLUtil::ExecuteSQLQuery(
-          "select "
-          "l_orderkey, "
-          "sum(l_extendedprice * (1 - l_discount)) as revenue, "
-          "o_orderdate, "
-          "o_shippriority "
-          "from "
-          "customer, "
-          "orders, "
-          "lineitem "
-          "where "
-          "c_mktsegment = 'MACHINERY' "
-          "and c_custkey = o_custkey "
-          "and l_orderkey = o_orderkey "
-          "and o_orderdate < date '1995-03-10' "
-          "and l_shipdate > date '1995-03-10' "
-          "group by "
-          "l_orderkey, "
-          "o_orderdate, "
-          "o_shippriority;",
+  std::string query =
+    "select "
+    "l_orderkey, "
+    "sum(l_extendedprice * (1 - l_discount)) as revenue, "
+    "o_orderdate, "
+    "o_shippriority "
+    "from "
+    "customer, "
+    "orders, "
+    "lineitem "
+    "where "
+    "c_mktsegment = 'MACHINERY' "
+    "and c_custkey = o_custkey "
+    "and l_orderkey = o_orderkey "
+    "and o_orderdate < date '1995-03-10' "
+    "and l_shipdate > date '1995-03-10' "
+    "group by "
+    "l_orderkey, "
+    "o_orderdate, "
+    "o_shippriority;";
 //        "order by "
 //        "sum(l_extendedprice * (1 - l_discount)) desc, "
 //        "o_orderdate; "
-          IsolationLevelType::READ_ONLY
-      );
 
-      ASSERT_EQ(result, ResultType::SUCCESS);
-    });
+  DoForAllBenchmarkLevels([&]() {
+    DoForAllExecutionMethods(runs_, query, dump_results_);
   });
 }
 
 TEST_F(InterpreterBenchmark, Q5) {
-  DoForAllBenchmarkLevels([&] () {
-    DoForAllExecutionMethods(runs_, [&]() {
-      auto result = TestingSQLUtil::ExecuteSQLQuery(
-          "select "
-          "n_name, "
-          "sum(l_extendedprice * (1 - l_discount)) as revenue "
-          "from "
-          "customer, "
-          "orders, "
-          "lineitem, "
-          "supplier, "
-          "nation, "
-          "region "
-          "where "
-          "c_custkey = o_custkey "
-          "and l_orderkey = o_orderkey "
-          "and l_suppkey = s_suppkey "
-          "and c_nationkey = s_nationkey "
-          "and s_nationkey = n_nationkey "
-          "and n_regionkey = r_regionkey "
-          "and r_name = 'AFRICA' "
-          "and o_orderdate >= date '1997-01-01' "
-          "and o_orderdate < date '1998-01-01' "
-          "group by "
-          "n_name; ",
+  std::string query =
+    "select "
+    "n_name, "
+    "sum(l_extendedprice * (1 - l_discount)) as revenue "
+    "from "
+    "customer, "
+    "orders, "
+    "lineitem, "
+    "supplier, "
+    "nation, "
+    "region "
+    "where "
+    "c_custkey = o_custkey "
+    "and l_orderkey = o_orderkey "
+    "and l_suppkey = s_suppkey "
+    "and c_nationkey = s_nationkey "
+    "and s_nationkey = n_nationkey "
+    "and n_regionkey = r_regionkey "
+    "and r_name = 'AFRICA' "
+    "and o_orderdate >= date '1997-01-01' "
+    "and o_orderdate < date '1998-01-01' "
+    "group by "
+    "n_name; ";
 //        "order by"
 //        "sum(l_extendedprice * (1 - l_discount)) desc;"
-          IsolationLevelType::READ_ONLY
-      );
 
-      ASSERT_EQ(result, ResultType::SUCCESS);
-    });
+  DoForAllBenchmarkLevels([&]() {
+    DoForAllExecutionMethods(runs_, query, dump_results_);
   });
 }
 
 TEST_F(InterpreterBenchmark, Q6) {
-  DoForAllBenchmarkLevels([&] () {
-    DoForAllExecutionMethods(runs_, [&]() {
-      auto result = TestingSQLUtil::ExecuteSQLQuery(
-          "select "
-          "sum(l_extendedprice * l_discount) as revenue "
-          "from "
-          "lineitem "
-          "where "
-          "l_shipdate >= date '1997-01-01' "
-          "and l_shipdate < date '1998-01-01' "
-          "and l_discount >= (0.07 - 0.01)  "
-          "and l_discount <= (0.07 + 0.01) "
-          "and l_quantity < 24;",
-          IsolationLevelType::READ_ONLY
-      );
+  std::string query =
+    "select "
+    "sum(l_extendedprice * l_discount) as revenue "
+    "from "
+    "lineitem "
+    "where "
+    "l_shipdate >= date '1997-01-01' "
+    "and l_shipdate < date '1998-01-01' "
+    "and l_discount >= (0.07 - 0.01)  "
+    "and l_discount <= (0.07 + 0.01) "
+    "and l_quantity < 24;";
 
-      ASSERT_EQ(result, ResultType::SUCCESS);
-    });
+  DoForAllBenchmarkLevels([&]() {
+    DoForAllExecutionMethods(runs_, query, dump_results_);
   });
 }
 

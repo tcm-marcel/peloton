@@ -80,7 +80,7 @@ class Benchmark {
   }
 
   void Dump() const {
-    std::cout << ">> (" << instance_level_ << ") " << section_ << std::endl;
+    std::cout << ">> " << test_case_ << " >> (" << instance_level_ << ") " << section_ << std::endl;
 
     for (auto pair : parameters_) {
       auto stats = VectorStats(pair.second);
@@ -149,6 +149,7 @@ class Benchmark {
 
   static std::unordered_map<std::string, Benchmark> instances_;
   static ExecutionMethod execution_method_;
+  static std::string test_case_;
   static bool active_;
   static bool run_level_;
 
