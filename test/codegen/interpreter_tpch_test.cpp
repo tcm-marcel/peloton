@@ -221,6 +221,10 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     TestingSQLUtil::ExecuteSQLQuery(std::move(query), result, tuple_descriptor,
                                     rows_changed, error_message, IsolationLevelType::READ_ONLY);
 
+    size_t number_rows = result.size() / tuple_descriptor.size();
+
+    LOG_INFO("Query returned %lu rows", number_rows);
+
     return std::make_pair(std::move(result), std::move(tuple_descriptor));
   }
 
@@ -237,10 +241,9 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
       for (unsigned int j = 0; j < tuple_descriptor.size(); j++) {
         file << TestingSQLUtil::GetResultValueAsString(
             values, i * tuple_descriptor.size() + j);
-        if (j < tuple_descriptor.size() - 1) {
-          file << "|";
-        }
+        file << "|";
       }
+      file << "\n";
     }
 
     file.close();
@@ -262,9 +265,9 @@ TEST_F(InterpreterBenchmark, LoadData) {
 // TODO:
 // cache flushing
 
-TEST_F(InterpreterBenchmark, DISABLED_SelectStar) {
+TEST_F(InterpreterBenchmark, SelectStar) {
   std::string query =
-    "select * from lineitem";
+    "select * from nation";
 
   DoForAllBenchmarkLevels([&]() {
     DoForAllExecutionMethods(runs_, query, dump_results_);
