@@ -84,6 +84,27 @@ class TPCHLoader {
     }
   }
 
+  void GenerateSQL() {
+    for (auto &table : tables_) {
+      std::string in_path = data_path_ + table.name + ".tbl";
+      LOG_INFO("Creating insert SQL from file: %s", in_path.c_str());
+
+      std::ifstream file(in_path);
+
+      if (!file.is_open())
+        std::perror("Error opening data file");
+
+      while (file.peek() != EOF) {
+        auto sql =
+            CreateInsertSQL(file, table.data_table, table.types, bulk_size_);
+
+        printf("%s\n", sql.c_str());
+        auto result = TestingSQLUtil::ExecuteSQLQuery(sql);
+        PELOTON_ASSERT(result == ResultType::SUCCESS);
+      }
+    }
+  }
+
   void VerifyInserts() {
     for (auto &table : tables_) {
       LOG_INFO("Verify table '%s': %lu/%lu tuples", table.name.c_str(), table.data_table->GetTupleCount(), table.number_tuples);
@@ -167,6 +188,40 @@ class TPCHLoader {
     } catch (tbb::user_abort exception) {
       return;
     }
+  }
+
+  std::string CreateInsertSQL(std::ifstream &file, storage::DataTable *table, std::vector<TypeId> types, size_t number_tuples) {
+    std::string sql = "INSERT INTO " + table->GetName() + " VALUES ";
+    std::string line;
+    size_t i = 0;
+
+    for (; i < number_tuples && std::getline(file, line); i++) {
+      auto iline = std::stringstream(line);
+
+      if (i > 0)
+        sql += ", (";
+      else
+        sql += "(";
+
+      for (size_t j = 0; j < types.size(); j++) {
+        std::string cell;
+        std::getline(iline, cell, '|');
+
+        if (j > 0)
+          sql += ", ";
+
+        if (types[j] == TypeId::VARCHAR || types[j] == TypeId::DATE)
+          sql += "'" + cell + "'";
+        else
+          sql += cell;
+      }
+
+      sql += ")";
+    }
+
+    sql += ";";
+
+    return sql;
   }
 
   std::unique_ptr<planner::InsertPlan> CreateInsertPlan(std::ifstream &file, storage::DataTable *table, std::vector<TypeId> types, size_t number_tuples) {
