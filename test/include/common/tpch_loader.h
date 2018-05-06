@@ -97,10 +97,11 @@ class TPCHLoader {
       while (file.peek() != EOF) {
         auto sql =
             CreateInsertSQL(file, table.data_table, table.types, bulk_size_);
-
-        printf("%s\n", sql.c_str());
+        
         auto result = TestingSQLUtil::ExecuteSQLQuery(sql);
-        PELOTON_ASSERT(result == ResultType::SUCCESS);
+        if (result != ResultType::SUCCESS) {
+          LOG_ERROR("Insert with SQL failed for this query: %s", sql.c_str());
+        }
       }
     }
   }
