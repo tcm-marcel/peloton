@@ -13,6 +13,7 @@
 
 #include "binder/bind_node_visitor.h"
 #include <random>
+#include <include/common/benchmark.h>
 #include "catalog/catalog.h"
 #include "common/logger.h"
 #include "concurrency/transaction_manager_factory.h"
@@ -61,10 +62,18 @@ ResultType TestingSQLUtil::ExecuteSQLQuery(
   LOG_INFO("Query: %s", query.c_str());
   // prepareStatement
   std::string unnamed_statement = "unnamed";
+
+
+  Benchmark::Start(1, "parser");
+
   auto &peloton_parser = parser::PostgresParser::GetInstance();
   auto sql_stmt_list = peloton_parser.BuildParseTree(query);
+
+  Benchmark::Stop(1, "parser");
+
+
   PELOTON_ASSERT(sql_stmt_list);
-  if (!sql_stmt_list->is_valid) {
+   if (!sql_stmt_list->is_valid) {
     return ResultType::FAILURE;
   }
   auto statement = traffic_cop_.PrepareStatement(unnamed_statement, query,

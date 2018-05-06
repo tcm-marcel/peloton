@@ -13,6 +13,7 @@
 #include "traffic_cop/traffic_cop.h"
 
 #include <utility>
+#include <include/common/benchmark.h>
 
 #include "binder/bind_node_visitor.h"
 #include "common/internal_types.h"
@@ -583,6 +584,9 @@ ResultType TrafficCop::ExecuteStatement(
         // The statement may be out of date
         // It needs to be replan
         if (statement->GetNeedsReplan()) {
+
+          Benchmark::Start(1, "sql optimizer");
+
           // TODO(Tianyi) Move Statement Replan into Statement's method
           // to increase coherence
           auto bind_node_visitor = binder::BindNodeVisitor(
@@ -593,6 +597,8 @@ ResultType TrafficCop::ExecuteStatement(
               statement->GetStmtParseTreeList(), tcop_txn_state_.top().first);
           statement->SetPlanTree(plan);
           statement->SetNeedsReplan(true);
+
+          Benchmark::Stop(1, "sql optimizer");
         }
 
         ExecuteHelper(statement->GetPlanTree(), params, result, result_format,

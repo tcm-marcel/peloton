@@ -266,17 +266,18 @@ TEST_F(InterpreterBenchmark, LoadData) {
 // cache flushing
 
 // DEBUG
-TEST_F(InterpreterBenchmark, DumpTables) {
-  for (const std::string &table : {"nation", "region", "part", "supplier", "partsupp", "customer", "orders", "lineitem"}) {
+TEST_F(InterpreterBenchmark, DISABLED_DumpTables) {
+  for (const std::string &table : {"nation", "region", "part", "supplier",
+                                   "partsupp", "customer", "orders",
+                                   "lineitem"}) {
     auto result = ExecuteQuery("select * from " + table + ";");
-
     std::string filename = table + "_dump.tbl";
     if (dump_results_ && !FileExists(filename))
       DumpResultToFile(filename, std::move(result));
   }
 }
 
-TEST_F(InterpreterBenchmark, DISABLED_SelectStar) {
+TEST_F(InterpreterBenchmark, SelectStar) {
   std::string query =
     "select * from nation";
 
@@ -285,7 +286,7 @@ TEST_F(InterpreterBenchmark, DISABLED_SelectStar) {
   });
 }
 
-TEST_F(InterpreterBenchmark, DISABLED_Q1) {
+TEST_F(InterpreterBenchmark, Q1) {
   std::string query =
     "select "
     "l_returnflag, "
@@ -315,7 +316,7 @@ TEST_F(InterpreterBenchmark, DISABLED_Q1) {
 }
 
 
-TEST_F(InterpreterBenchmark, DISABLED_Q3) {
+TEST_F(InterpreterBenchmark, Q3) {
   std::string query =
     "select "
     "l_orderkey, "
@@ -345,7 +346,7 @@ TEST_F(InterpreterBenchmark, DISABLED_Q3) {
   });
 }
 
-TEST_F(InterpreterBenchmark, DISABLED_Q5) {
+TEST_F(InterpreterBenchmark, Q5) {
   std::string query =
     "select "
     "n_name, "
@@ -377,7 +378,7 @@ TEST_F(InterpreterBenchmark, DISABLED_Q5) {
   });
 }
 
-TEST_F(InterpreterBenchmark, DISABLED_Q6) {
+TEST_F(InterpreterBenchmark, Q6) {
   std::string query =
     "select "
     "sum(l_extendedprice * l_discount) as revenue "

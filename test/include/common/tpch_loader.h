@@ -233,8 +233,20 @@ class TPCHLoader {
       }
 
       case TypeId::DATE: {
-        uint32_t date = ConvertDate(input);
-        return type::ValueFactory::GetDateValue(date);
+        uint32_t res = 0;
+        // Format: YYYY-MM-DD
+        uint32_t year = 0;
+        uint32_t month = 0;
+        uint32_t day = 0;
+        if (sscanf(input.c_str(), "%4u-%2u-%2u", &year, &month, &day) != 3) {
+          LOG_ERROR("Date string has wrong format: %s", input.c_str());
+        }
+
+        res += year;
+        res *= 10000;
+        res += month * 100;
+        res += day;
+        return type::ValueFactory::GetDateValue(res);
       }
 
       default:
@@ -243,15 +255,6 @@ class TPCHLoader {
   }
 
  private:
-  // Convert the given string into a i32 date
-  uint32_t ConvertDate(std::string &input) {
-    std::tm date;
-    PELOTON_MEMSET(&date, 0, sizeof(std::tm));
-    strptime(input.data(), "%Y-%m-%d", &date);
-    date.tm_isdst = -1;
-    return static_cast<uint32_t>(mktime(&date));
-  }
-
   size_t GetNumberLines(std::string path) const {
     std::ifstream in(path);
 
