@@ -84,9 +84,11 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
   // TODO(marcel): add switch to enable/disable optimization
   // TODO(marcel): add timer to measure time used for optimization (see
   // RuntimeStats)
-  Benchmark::Start(1, "llvm optimize");
-  code_context_.Optimize();
-  Benchmark::Stop(1, "llvm optimize");
+  if (Benchmark::execution_method_ != Benchmark::ExecutionMethod::LLVMInterpreter) {
+    Benchmark::Start(1, "llvm optimize");
+    code_context_.Optimize();
+    Benchmark::Stop(1, "llvm optimize");
+  }
 
   is_compiled_ = false;
 }
