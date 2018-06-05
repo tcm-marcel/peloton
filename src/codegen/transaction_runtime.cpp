@@ -45,8 +45,9 @@ uint32_t TransactionRuntime::PerformVectorizedRead(
     selection_vector[out_idx] = i;
     out_idx += (visibility == VisibilityType::OK);
   }
-
+  /*
   uint32_t tile_group_idx = tile_group.GetTileGroupId();
+
 
   // Perform a read operation for every visible tuple we found
   uint32_t end_idx = out_idx;
@@ -61,7 +62,7 @@ uint32_t TransactionRuntime::PerformVectorizedRead(
     // Update the selection vector and output position
     selection_vector[out_idx] = selection_vector[idx];
     out_idx += static_cast<uint32_t>(can_read);
-  }
+  }*/
 
   return out_idx;
 }

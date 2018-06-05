@@ -33,6 +33,8 @@
 namespace peloton {
 namespace executor {
 
+#define TXN 0
+
 /**
  * @brief Constructor for seqscan executor.
  * @param node Seqscan node corresponding to this executor.
@@ -82,10 +84,10 @@ bool SeqScanExecutor::DExecute() {
       // There will be a child node on the create index scenario,
       // but we don't want to use this execution flow
       !(GetRawNode()->GetChildren().size() > 0 &&
-        GetRawNode()->GetChildren()[0].get()->GetPlanNodeType() ==
-            PlanNodeType::CREATE &&
-        ((planner::CreatePlan *)GetRawNode()->GetChildren()[0].get())
-                ->GetCreateType() == CreateType::INDEX)) {
+          GetRawNode()->GetChildren()[0].get()->GetPlanNodeType() ==
+              PlanNodeType::CREATE &&
+          ((planner::CreatePlan *)GetRawNode()->GetChildren()[0].get())
+              ->GetCreateType() == CreateType::INDEX)) {
     // FIXME Check all requirements for children_.size() == 0 case.
     LOG_TRACE("Seq Scan executor :: 1 child ");
 
@@ -118,20 +120,20 @@ bool SeqScanExecutor::DExecute() {
     }
     return false;
   }
-  // Scanning a table
+    // Scanning a table
   else if (children_.size() == 0 ||
-           // If we are creating an index, there will be a child
-           (children_.size() == 1 &&
-            // This check is only needed to pass seq_scan_test
-            // unless it is possible to add a executor child
-            // without a corresponding plan.
-            GetRawNode()->GetChildren().size() > 0 &&
-            // Check if the plan is what we actually expect.
-            GetRawNode()->GetChildren()[0].get()->GetPlanNodeType() ==
-                PlanNodeType::CREATE &&
-            // If it is, confirm it is for indexes
-            ((planner::CreatePlan *)GetRawNode()->GetChildren()[0].get())
-                    ->GetCreateType() == CreateType::INDEX)) {
+      // If we are creating an index, there will be a child
+      (children_.size() == 1 &&
+          // This check is only needed to pass seq_scan_test
+          // unless it is possible to add a executor child
+          // without a corresponding plan.
+          GetRawNode()->GetChildren().size() > 0 &&
+          // Check if the plan is what we actually expect.
+          GetRawNode()->GetChildren()[0].get()->GetPlanNodeType() ==
+              PlanNodeType::CREATE &&
+          // If it is, confirm it is for indexes
+          ((planner::CreatePlan *)GetRawNode()->GetChildren()[0].get())
+              ->GetCreateType() == CreateType::INDEX)) {
     LOG_TRACE("Seq Scan executor :: 0 child ");
 
     PELOTON_ASSERT(target_table_ != nullptr);
@@ -143,18 +145,22 @@ bool SeqScanExecutor::DExecute() {
       // of the same index.
       index_done_ = true;
     }
-    
+
+#if TXN
     concurrency::TransactionManager &transaction_manager =
         concurrency::TransactionManagerFactory::GetInstance();
 
     bool acquire_owner = GetPlanNode<planner::AbstractScan>().IsForUpdate();
     auto current_txn = executor_context_->GetTransaction();
+#endif
 
     // Retrieve next tile group.
     while (current_tile_group_offset_ < table_tile_group_count_) {
       auto tile_group =
           target_table_->GetTileGroup(current_tile_group_offset_++);
+#if TXN
       auto tile_group_header = tile_group->GetHeader();
+#endif
 
       oid_t active_tuple_count = tile_group->GetNextTupleSlot();
 
@@ -162,23 +168,30 @@ bool SeqScanExecutor::DExecute() {
       // and applying the predicate.
       std::vector<oid_t> position_list;
       for (oid_t tuple_id = 0; tuple_id < active_tuple_count; tuple_id++) {
+#if TXN
         ItemPointer location(tile_group->GetTileGroupId(), tuple_id);
 
         auto visibility = transaction_manager.IsVisible(
             current_txn, tile_group_header, tuple_id);
-
+#endif
         // check transaction visibility
+#if TXN
         if (visibility == VisibilityType::OK) {
+#endif
           // if the tuple is visible, then perform predicate evaluation.
           if (predicate_ == nullptr) {
             position_list.push_back(tuple_id);
-            auto res = transaction_manager.PerformRead(current_txn, location,
+#if TXN
+            auto res = transaction_manager.PerformRead(current_txn,
+                                                       location,
+                                                       tile_group_header,
                                                        acquire_owner);
             if (!res) {
               transaction_manager.SetTransactionResult(current_txn,
                                                        ResultType::FAILURE);
               return res;
             }
+#endif
           } else {
             ContainerTuple<storage::TileGroup> tuple(tile_group.get(),
                                                      tuple_id);
@@ -188,7 +201,10 @@ bool SeqScanExecutor::DExecute() {
             LOG_TRACE("Evaluation result: %s", eval.GetInfo().c_str());
             if (eval.IsTrue()) {
               position_list.push_back(tuple_id);
-              auto res = transaction_manager.PerformRead(current_txn, location,
+#if TXN
+              auto res = transaction_manager.PerformRead(current_txn,
+                                                         location,
+                                                         tile_group_header,
                                                          acquire_owner);
               if (!res) {
                 transaction_manager.SetTransactionResult(current_txn,
@@ -197,9 +213,12 @@ bool SeqScanExecutor::DExecute() {
               } else {
                 LOG_TRACE("Sequential Scan Predicate Satisfied");
               }
+#endif
             }
           }
+#if TXN
         }
+#endif
       }
 
       // Don't return empty tiles
@@ -244,7 +263,7 @@ void SeqScanExecutor::UpdatePredicate(const std::vector<oid_t> &column_ids,
   // combine with original predicate
   if (old_predicate_ != nullptr) {
     expression::AbstractExpression *lexpr = new_predicate,
-                                   *rexpr = old_predicate_->Copy();
+        *rexpr = old_predicate_->Copy();
 
     new_predicate = new expression::ConjunctionExpression(
         ExpressionType::CONJUNCTION_AND, lexpr, rexpr);
@@ -266,9 +285,9 @@ expression::AbstractExpression *SeqScanExecutor::ColumnsValuesToExpr(
 
   // recursively build the expression tree
   expression::AbstractExpression *lexpr = ColumnValueToCmpExpr(
-                                     predicate_column_ids[idx], values[idx]),
-                                 *rexpr = ColumnsValuesToExpr(
-                                     predicate_column_ids, values, idx + 1);
+      predicate_column_ids[idx], values[idx]),
+      *rexpr = ColumnsValuesToExpr(
+      predicate_column_ids, values, idx + 1);
 
   expression::AbstractExpression *root_expr =
       new expression::ConjunctionExpression(ExpressionType::CONJUNCTION_AND,
