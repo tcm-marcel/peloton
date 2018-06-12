@@ -279,7 +279,7 @@ TEST_F(InterpreterBenchmark, DISABLED_DumpTables) {
 
 TEST_F(InterpreterBenchmark, SelectStar) {
   std::string query =
-    "select * from nation";
+    "select * from lineitem";
 
   DoForAllBenchmarkLevels([&]() {
     DoForAllExecutionMethods(runs_, query, dump_results_);
