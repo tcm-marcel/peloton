@@ -84,10 +84,10 @@ bool SeqScanExecutor::DExecute() {
       // There will be a child node on the create index scenario,
       // but we don't want to use this execution flow
       !(GetRawNode()->GetChildren().size() > 0 &&
-          GetRawNode()->GetChildren()[0].get()->GetPlanNodeType() ==
-              PlanNodeType::CREATE &&
-          ((planner::CreatePlan *)GetRawNode()->GetChildren()[0].get())
-              ->GetCreateType() == CreateType::INDEX)) {
+        GetRawNode()->GetChildren()[0].get()->GetPlanNodeType() ==
+            PlanNodeType::CREATE &&
+        ((planner::CreatePlan *)GetRawNode()->GetChildren()[0].get())
+                ->GetCreateType() == CreateType::INDEX)) {
     // FIXME Check all requirements for children_.size() == 0 case.
     LOG_TRACE("Seq Scan executor :: 1 child ");
 
@@ -120,20 +120,20 @@ bool SeqScanExecutor::DExecute() {
     }
     return false;
   }
-    // Scanning a table
+  // Scanning a table
   else if (children_.size() == 0 ||
-      // If we are creating an index, there will be a child
-      (children_.size() == 1 &&
-          // This check is only needed to pass seq_scan_test
-          // unless it is possible to add a executor child
-          // without a corresponding plan.
-          GetRawNode()->GetChildren().size() > 0 &&
-          // Check if the plan is what we actually expect.
-          GetRawNode()->GetChildren()[0].get()->GetPlanNodeType() ==
-              PlanNodeType::CREATE &&
-          // If it is, confirm it is for indexes
-          ((planner::CreatePlan *)GetRawNode()->GetChildren()[0].get())
-              ->GetCreateType() == CreateType::INDEX)) {
+           // If we are creating an index, there will be a child
+           (children_.size() == 1 &&
+            // This check is only needed to pass seq_scan_test
+            // unless it is possible to add a executor child
+            // without a corresponding plan.
+            GetRawNode()->GetChildren().size() > 0 &&
+            // Check if the plan is what we actually expect.
+            GetRawNode()->GetChildren()[0].get()->GetPlanNodeType() ==
+                PlanNodeType::CREATE &&
+            // If it is, confirm it is for indexes
+            ((planner::CreatePlan *)GetRawNode()->GetChildren()[0].get())
+                    ->GetCreateType() == CreateType::INDEX)) {
     LOG_TRACE("Seq Scan executor :: 0 child ");
 
     PELOTON_ASSERT(target_table_ != nullptr);
@@ -263,7 +263,7 @@ void SeqScanExecutor::UpdatePredicate(const std::vector<oid_t> &column_ids,
   // combine with original predicate
   if (old_predicate_ != nullptr) {
     expression::AbstractExpression *lexpr = new_predicate,
-        *rexpr = old_predicate_->Copy();
+                                   *rexpr = old_predicate_->Copy();
 
     new_predicate = new expression::ConjunctionExpression(
         ExpressionType::CONJUNCTION_AND, lexpr, rexpr);
@@ -285,9 +285,9 @@ expression::AbstractExpression *SeqScanExecutor::ColumnsValuesToExpr(
 
   // recursively build the expression tree
   expression::AbstractExpression *lexpr = ColumnValueToCmpExpr(
-      predicate_column_ids[idx], values[idx]),
-      *rexpr = ColumnsValuesToExpr(
-      predicate_column_ids, values, idx + 1);
+                                     predicate_column_ids[idx], values[idx]),
+                                 *rexpr = ColumnsValuesToExpr(
+                                     predicate_column_ids, values, idx + 1);
 
   expression::AbstractExpression *root_expr =
       new expression::ConjunctionExpression(ExpressionType::CONJUNCTION_AND,
