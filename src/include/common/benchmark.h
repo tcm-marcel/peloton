@@ -140,7 +140,8 @@ class Benchmark {
     Adaptive,
     PlanInterpreter,
     LLVMNative,
-    LLVMInterpreter
+    LLVMInterpreterNotOptimized,
+    LLVMInterpreterOptimized
   };
 
   // configuration
