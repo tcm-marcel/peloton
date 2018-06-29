@@ -49,6 +49,7 @@ uint32_t TransactionRuntime::PerformVectorizedRead(
     // Update the output position
     selection_vector[out_idx] = i;
     //out_idx += (visibility == VisibilityType::OK);
+    out_idx += 1;
   }
   /*
   uint32_t tile_group_idx = tile_group.GetTileGroupId();
