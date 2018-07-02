@@ -33,7 +33,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   }
 
   const size_t runs_ = 10;
-  const bool dump_results_ = true;
+  const bool dump_results_ = false;
 
  public:
   void CreateTables() {
