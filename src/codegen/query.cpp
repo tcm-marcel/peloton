@@ -51,19 +51,13 @@ void Query::Execute(executor::ExecutorContext &executor_context,
 
   if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterNotOptimized || Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterOptimized)
     ExecuteInterpreter(func_args, stats);
-  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative) {
-    Compile();
+  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeNotOptimized || Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) {
     ExecuteNative(func_args, stats);
   } else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
     ExecuteNative(func_args, stats);
   } else {
     PELOTON_ASSERT(false);
   }
-
-  executor::ExecutionResult result;
-  result.m_result = ResultType::SUCCESS;
-  result.m_processed = executor_context->num_processed;
-  on_complete(result);
 }
 
 void Query::Prepare(const LLVMFunctions &query_funcs) {
@@ -82,7 +76,7 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
   // TODO(marcel): add timer to measure time used for optimization (see
   // RuntimeStats)
   if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterOptimized ||
-      Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNative) {
+      Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) {
     Benchmark::Start(1, "llvm optimize");
     code_context_.Optimize();
     Benchmark::Stop(1, "llvm optimize");
@@ -92,6 +86,8 @@ void Query::Prepare(const LLVMFunctions &query_funcs) {
 }
 
 void Query::Compile(CompileStats *stats) {
+  if (is_compiled_) return;
+
   // Timer
   Timer<std::milli> timer;
   if (stats != nullptr) {

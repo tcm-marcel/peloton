@@ -26,6 +26,8 @@ uint32_t TransactionRuntime::PerformVisibilityCheck(
     concurrency::TransactionContext &txn, storage::TileGroup &tile_group,
     uint32_t tid_start, uint32_t tid_end, uint32_t *selection_vector) {
 
+  (void) txn;
+  (void) tile_group;
   // Get the transaction manager
   //auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
 
@@ -50,30 +52,35 @@ uint32_t TransactionRuntime::PerformVisibilityCheck(
 uint32_t TransactionRuntime::PerformVectorizedRead(
     concurrency::TransactionContext &txn, storage::TileGroup &tile_group,
     uint32_t *selection_vector, uint32_t end_idx, bool is_for_update) {
+
+  (void) txn;
+  (void) tile_group;
+  (void) is_for_update;
+
   // Get the transaction manager
-  auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
+  //auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
 
   // Get the tile group header
-  auto tile_group_header = tile_group.GetHeader();
+  //auto tile_group_header = tile_group.GetHeader();
 
-  uint32_t tile_group_idx = tile_group.GetTileGroupId();
+  //uint32_t tile_group_idx = tile_group.GetTileGroupId();
 
-  /*
+
   // Perform a read operation for every visible tuple we found
   uint32_t out_idx = 0;
   for (uint32_t idx = 0; idx < end_idx; idx++) {
     // Construct the item location
-    ItemPointer location{tile_group_idx, selection_vector[idx]};
+    //ItemPointer location{tile_group_idx, selection_vector[idx]};
 
     // Perform the read
-    bool can_read = txn_manager.PerformRead(&txn, location, tile_group_header,
-                                            is_for_update);
+    //bool can_read = txn_manager.PerformRead(&txn, location, tile_group_header,
+    //is_for_update);
 
     // Update the selection vector and output position
     selection_vector[out_idx] = selection_vector[idx];
-    out_idx += static_cast<uint32_t>(can_read);
+    out_idx += 1;
   }
-  */
+
   return out_idx;
 }
 

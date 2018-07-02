@@ -295,13 +295,14 @@ PelotonCodeGenTest::CodeGenStats PelotonCodeGenTest::CompileAndExecute(
 
   Benchmark::Stop(1, "codegen");
 
-  // Execute the query.
-  compiled_query->Compile();
-  stats.runtime_stats = ExecuteSync(
-      *compiled_query,
-      std::unique_ptr<executor::ExecutorContext>(
-          new executor::ExecutorContext(txn, std::move(parameters))),
-      consumer);
+  // Executor context
+  executor::ExecutorContext exec_ctx{txn, std::move(parameters)};
+
+  // Compile Query to native code
+  query->Compile();
+
+  // Execute the quer
+  query->Execute(exec_ctx, consumer, &stats.runtime_stats);
 
   // Commit the transaction.
   txn_manager.CommitTransaction(txn);

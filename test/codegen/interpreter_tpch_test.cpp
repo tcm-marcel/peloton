@@ -14,7 +14,6 @@
 #include "codegen/testing_codegen_util.h"
 #include "concurrency/transaction_manager_factory.h"
 #include "sql/testing_sql_util.h"
-#include "common/tpch_loader.h"
 
 #include <iostream>
 #include <fstream>
@@ -40,7 +39,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
   void CreateTables() {
     auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
     auto txn = txn_manager.BeginTransaction();
-    catalog::Catalog::GetInstance()->CreateDatabase(DEFAULT_DB_NAME, txn);
+    catalog::Catalog::GetInstance()->CreateDatabase(txn, DEFAULT_DB_NAME);
     txn_manager.CommitTransaction(txn);
 
     ResultType result;
@@ -135,7 +134,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     // free the database just created
     auto &txn_manager = concurrency::TransactionManagerFactory::GetInstance();
     auto txn = txn_manager.BeginTransaction();
-    catalog::Catalog::GetInstance()->DropDatabaseWithName(DEFAULT_DB_NAME, txn);
+    catalog::Catalog::GetInstance()->DropDatabaseWithName(txn, DEFAULT_DB_NAME);
     txn_manager.CommitTransaction(txn);
   }
 
@@ -175,7 +174,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
 
     {
       Benchmark::execution_method_ =
-          Benchmark::ExecutionMethod::LLVMNative;
+          Benchmark::ExecutionMethod::LLVMNativeNotOptimized;
       for (size_t i = 0; i < times; i++) {
         Benchmark::Start(0, "llvm native");
         auto result = ExecuteQuery(query);
@@ -191,13 +190,45 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
 
     {
       Benchmark::execution_method_ =
-          Benchmark::ExecutionMethod::LLVMInterpreter;
+          Benchmark::ExecutionMethod::LLVMNativeOptimized;
+      for (size_t i = 0; i < times; i++) {
+        Benchmark::Start(0, "llvm native-opt");
+        auto result = ExecuteQuery(query);
+        Benchmark::Stop(0, "llvm native-opt");
+
+        std::string filename = Benchmark::test_case_ + "_llvm_native.tbl";
+        if (dump_results && i == 0 && !FileExists(filename))
+          DumpResultToFile(filename, std::move(result));
+      }
+
+      Benchmark::ResetAll();
+    }
+
+    {
+      Benchmark::execution_method_ =
+          Benchmark::ExecutionMethod::LLVMInterpreterNotOptimized;
       for (size_t i = 0; i < times; i++) {
         Benchmark::Start(0, "llvm interpreter");
         auto result = ExecuteQuery(query);
         Benchmark::Stop(0, "llvm interpreter");
 
         std::string filename = Benchmark::test_case_ + "_llvm_interpreter.tbl";
+        if (dump_results && i == 0 && !FileExists(filename))
+          DumpResultToFile(filename, std::move(result));
+      }
+
+      Benchmark::ResetAll();
+    }
+
+    {
+      Benchmark::execution_method_ =
+          Benchmark::ExecutionMethod::LLVMInterpreterOptimized;
+      for (size_t i = 0; i < times; i++) {
+        Benchmark::Start(0, "llvm interpreter-opt");
+        auto result = ExecuteQuery(query);
+        Benchmark::Stop(0, "llvm interpreter-opt");
+
+        std::string filename = Benchmark::test_case_ + "_llvm_interpreter_opt.tbl";
         if (dump_results && i == 0 && !FileExists(filename))
           DumpResultToFile(filename, std::move(result));
       }
@@ -219,9 +250,9 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
 
     // Execute query
     TestingSQLUtil::ExecuteSQLQuery(std::move(query), result, tuple_descriptor,
-                                    rows_changed, error_message, IsolationLevelType::READ_ONLY);
+                                    rows_changed, error_message);
 
-    size_t number_rows = result.size() / tuple_descriptor.size();
+    size_t number_rows = (tuple_descriptor.size() == 0) ? 0 : result.size() / tuple_descriptor.size();
 
     LOG_INFO("Query returned %lu rows", number_rows);
 
@@ -257,9 +288,32 @@ TEST_F(InterpreterBenchmark, CreateTables) {
 
 TEST_F(InterpreterBenchmark, LoadData) {
   Benchmark::execution_method_ = Benchmark::ExecutionMethod::Adaptive;
-  TPCHLoader loader(*this);
-  loader.Load();
-  loader.VerifyInserts();
+
+  std::string path = "/home/marcel/dev/peloton/tpch-dbgen/data/";
+
+  LOG_INFO("Loading table 'nation.tbl'");
+  ExecuteQuery("COPY nation FROM '" + path + "nation.tbl' DELIMITER '|'");
+
+  LOG_INFO("Loading table 'partsupp.tbl'");
+  ExecuteQuery("COPY partsupp FROM '" + path + "partsupp.tbl' DELIMITER '|'");
+
+  LOG_INFO("Loading table 'lineitem.tbl'");
+  ExecuteQuery("COPY lineitem FROM '" + path + "lineitem.tbl' DELIMITER '|'");
+
+  LOG_INFO("Loading table 'orders.tbl'");
+  ExecuteQuery("COPY orders FROM '" + path + "orders.tbl' DELIMITER '|'");
+
+  LOG_INFO("Loading table 'region.tbl'");
+  ExecuteQuery("COPY region FROM '" + path + "region.tbl' DELIMITER '|'");
+
+  LOG_INFO("Loading table 'part.tbl'");
+  ExecuteQuery("COPY part FROM '" + path + "part.tbl' DELIMITER '|'");
+
+  LOG_INFO("Loading table 'supplier.tbl'");
+  ExecuteQuery("COPY supplier FROM '" + path + "supplier.tbl' DELIMITER '|'");
+
+  LOG_INFO("Loading table 'customer.tbl'");
+  ExecuteQuery("COPY customer FROM '" + path + "customer.tbl' DELIMITER '|'");
 }
 
 // TODO:

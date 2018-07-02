@@ -56,32 +56,16 @@ static void CompileAndExecutePlan(
       txn, codegen::QueryParameters(*plan, params)};
 
   // Compile the query
+  Benchmark::Start(1, "llvm codegen");
 
-//  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
-//    query = codegen::QueryCache::Instance().Find(plan);
-//    if (query == nullptr) {
-//      codegen::QueryCompiler compiler;
-//      auto compiled_query = compiler.Compile(
-//          *plan, executor_context->GetParams().GetQueryParametersMap(), consumer);
-//      compiled_query->Compile();
-//
-//      query = compiled_query.get();
-//      codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
-//    }
-//  } else {
+  codegen::QueryCompiler compiler;
+  auto compiled_query = compiler.Compile(
+    *plan, executor_context.GetParams().GetQueryParametersMap(), consumer);
 
-    Benchmark::Start(1, "llvm codegen");
-
-    codegen::QueryCompiler compiler;
-    auto compiled_query = compiler.Compile(
-        *plan, executor_context.GetParams().GetQueryParametersMap(), consumer);
-    //compiled_query->Compile();
-    query = compiled_query.get();
-    //codegen::QueryCache::Instance().Add(plan, std::move(compiled_query));
-//  }
+  Benchmark::Stop(1, "llvm codegen");
 
   // Execute the query!
-  query->Execute(executor_context, consumer);
+  compiled_query->Execute(executor_context, consumer);
 
   // Execution complete, setup the results
   executor::ExecutionResult result;
@@ -175,21 +159,21 @@ void PlanExecutor::ExecutePlan(
 
   if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::PlanInterpreter)
     InterpretPlan(plan, txn, params, result_format, on_complete);
-  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
-
+  else {
     try {
       if (codegen_enabled && codegen::QueryCompiler::IsSupported(*plan)) {
         CompileAndExecutePlan(plan, txn, params, on_complete);
       } else {
         InterpretPlan(plan, txn, params, result_format, on_complete);
       }
-  } catch (Exception &e) {
-    ExecutionResult result;
-    result.m_result = ResultType::FAILURE;
-    result.m_error_message = e.what();
-    LOG_ERROR("Error thrown during execution: %s",
-              result.m_error_message.c_str());
-    on_complete(result, {});
+    } catch (Exception &e) {
+      ExecutionResult result;
+      result.m_result = ResultType::FAILURE;
+      result.m_error_message = e.what();
+      LOG_ERROR("Error thrown during execution: %s",
+                result.m_error_message.c_str());
+      on_complete(result, {});
+    }
   }
 }
 

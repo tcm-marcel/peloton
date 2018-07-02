@@ -25,6 +25,8 @@
 #include "planner/plan_util.h"
 #include "traffic_cop/traffic_cop.h"
 
+#include "common/benchmark.h"
+
 namespace peloton {
 
 //===--------------------------------------------------------------------===//

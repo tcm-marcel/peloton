@@ -181,6 +181,7 @@ bool SeqScanExecutor::DExecute() {
           // if the tuple is visible, then perform predicate evaluation.
           if (predicate_ == nullptr) {
             position_list.push_back(tuple_id);
+#if TXN
             auto res = transaction_manager.PerformRead(current_txn,
                                                        location,
                                                        tile_group_header,
@@ -200,6 +201,7 @@ bool SeqScanExecutor::DExecute() {
             LOG_TRACE("Evaluation result: %s", eval.GetInfo().c_str());
             if (eval.IsTrue()) {
               position_list.push_back(tuple_id);
+#if TXN
               auto res = transaction_manager.PerformRead(current_txn,
                                                          location,
                                                          tile_group_header,

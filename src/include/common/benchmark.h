@@ -139,7 +139,8 @@ class Benchmark {
   enum class ExecutionMethod {
     Adaptive,
     PlanInterpreter,
-    LLVMNative,
+    LLVMNativeNotOptimized,
+    LLVMNativeOptimized,
     LLVMInterpreterNotOptimized,
     LLVMInterpreterOptimized
   };
