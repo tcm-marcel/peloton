@@ -53,7 +53,8 @@ void Query::Execute(executor::ExecutorContext &executor_context,
     try {
       ExecuteInterpreter(func_args, stats);
     } catch (interpreter::NotSupportedException e) {
-      code_context_.DumpContents();
+      LOG_ERROR("COULD NOT CREATE BYTECODE\n%s", code_context_.GetIR().c_str());
+
       throw e;
     }
   } else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeNotOptimized || Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) {

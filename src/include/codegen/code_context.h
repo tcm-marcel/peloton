@@ -124,9 +124,9 @@ class CodeContext {
   /// Get the module
   llvm::Module &GetModule() const { return *module_; }
 
- private:
   // Get the raw IR in text form
   std::string GetIR() const;
+ private:
 
   // Get the IR Builder
   llvm::IRBuilder<> &GetBuilder() { return *builder_; }
