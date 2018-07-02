@@ -147,7 +147,9 @@ void Query::ExecuteNative(FunctionArguments *function_arguments,
   if (!is_compiled_)
     Compile();
 
-  Benchmark::Start(1, "native execute init");
+  std::string name_opt = (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) ? "opt " : "";
+
+  Benchmark::Start(1, "native execute " + name_opt + "init");
 
   // Call init
   LOG_TRACE("Calling query's init() ...");
@@ -167,8 +169,8 @@ void Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Start();
   }
 
-  Benchmark::Stop(1, "native execute init");
-  Benchmark::Start(1, "native execute plan");
+  Benchmark::Stop(1, "native execute " + name_opt + "init");
+  Benchmark::Start(1, "native execute " + name_opt + "plan");
 
   // Execute the query!
   LOG_TRACE("Calling query's plan() ...");
@@ -188,12 +190,14 @@ void Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Start();
   }
 
-  Benchmark::Stop(1, "native execute plan");
-  Benchmark::Start(1, "native execute teardown");
+  Benchmark::Stop(1, "native execute " + name_opt + "plan");
+  Benchmark::Start(1, "native execute " + name_opt + "teardown");
 
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
   compiled_functions_.tear_down_func(function_arguments);
+
+  Benchmark::Start(1, "native execute " + name_opt + "teardown");
 
   // No need to cleanup if we get an exception while cleaning up...
   if (stats != nullptr) {
