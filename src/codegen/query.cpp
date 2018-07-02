@@ -49,9 +49,14 @@ void Query::Execute(executor::ExecutorContext &executor_context,
   func_args->executor_context = &executor_context;
   func_args->consumer_arg = consumer.GetConsumerState();
 
-  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterNotOptimized || Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterOptimized)
-    ExecuteInterpreter(func_args, stats);
-  else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeNotOptimized || Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) {
+  if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterNotOptimized || Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMInterpreterOptimized) {
+    try {
+      ExecuteInterpreter(func_args, stats);
+    } catch (interpreter::NotSupportedException e) {
+      code_context_.DumpContents();
+      throw e;
+    }
+  } else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeNotOptimized || Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) {
     ExecuteNative(func_args, stats);
   } else if (Benchmark::execution_method_ == Benchmark::ExecutionMethod::Adaptive) {
     ExecuteNative(func_args, stats);
