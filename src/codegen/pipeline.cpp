@@ -262,6 +262,9 @@ void Pipeline::MarkSource(OperatorTranslator *translator,
   bool parallel_exec_disabled = !settings::SettingsManager::GetBool(
                                     settings::SettingId::parallel_execution);
 
+  // DEBUG
+  parallel_exec_disabled = true;
+
   // Check if the consumer supports parallel execution
   auto &exec_consumer = compilation_ctx_.GetExecutionConsumer();
   bool parallel_consumer = exec_consumer.SupportsParallelExec();
