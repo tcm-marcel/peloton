@@ -206,6 +206,8 @@ void Query::ExecuteNative(FunctionArguments *function_arguments,
     timer.Stop();
     stats->tear_down_ms = timer.GetDuration();
   }
+
+  Benchmark::Stop(1, "native execute " + name_opt + "teardown");
 }
 
 void Query::ExecuteInterpreter(FunctionArguments *function_arguments,
