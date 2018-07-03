@@ -32,7 +32,7 @@ class InterpreterBenchmark : public PelotonCodeGenTest {
     Benchmark::test_case_ = std::string(::testing::UnitTest::GetInstance()->current_test_info()->name());
   }
 
-  const size_t runs_ = 10;
+  const size_t runs_ = 100;
   const bool dump_results_ = false;
 
  public:
