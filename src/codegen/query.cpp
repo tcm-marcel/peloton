@@ -100,7 +100,7 @@ void Query::Compile(CompileStats *stats) {
     timer.Start();
   }
 
-  std::string name_opt = (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) ? "opt " : "";
+  std::string name_opt = (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) ? " opt" : "";
 
   Benchmark::Start(1, "llvm compile" + name_opt);
 
@@ -198,8 +198,6 @@ void Query::ExecuteNative(FunctionArguments *function_arguments,
   // Clean up
   LOG_TRACE("Calling query's tearDown() ...");
   compiled_functions_.tear_down_func(function_arguments);
-
-  Benchmark::Start(1, "native execute " + name_opt + "teardown");
 
   // No need to cleanup if we get an exception while cleaning up...
   if (stats != nullptr) {
