@@ -100,13 +100,15 @@ void Query::Compile(CompileStats *stats) {
     timer.Start();
   }
 
-  Benchmark::Start(1, "llvm compile");
+  std::string name_opt = (Benchmark::execution_method_ == Benchmark::ExecutionMethod::LLVMNativeOptimized) ? "opt " : "";
+
+  Benchmark::Start(1, "llvm compile" + name_opt);
 
   // Compile all functions in context
   LOG_TRACE("Starting Query compilation ...");
   code_context_.Compile();
 
-  Benchmark::Stop(1, "llvm compile");
+  Benchmark::Stop(1, "llvm compile" + name_opt);
 
   // Get pointers to the JITed functions
   compiled_functions_.init_func =
